@@ -1,0 +1,11 @@
+app/(tabs)/index.tsx(155,22): error TS2339: Property 'start_image_url' does not exist on type 'never'.
+app/(tabs)/index.tsx(157,40): error TS2339: Property 'start_image_url' does not exist on type 'never'.
+app/(tabs)/index.tsx(160,68): error TS2345: Argument of type '{ status: string; is_grace_period: boolean; points_earned: number; }' is not assignable to parameter of type 'never'.
+app/(tabs)/index.tsx(168,60): error TS2345: Argument of type '{ status: string; is_grace_period: boolean; }' is not assignable to parameter of type 'never'.
+app/(tabs)/index.tsx(324,59): error TS2345: Argument of type '{ started_at: string; }' is not assignable to parameter of type 'never'.
+app/(tabs)/index.tsx(327,59): error TS2345: Argument of type '{ ended_at: string; status: string; points_earned: any; }' is not assignable to parameter of type 'never'.
+app/snap.tsx(88,17): error TS2345: Argument of type '{ start_image_url: string; started_at: string; }' is not assignable to parameter of type 'never'.
+app/snap.tsx(134,17): error TS2345: Argument of type '{ end_image_url: string; ended_at: string; }' is not assignable to parameter of type 'never'.
+app/snap.tsx(159,32): error TS2339: Property 'start_image_url' does not exist on type 'never'.
+app/snap.tsx(198,17): error TS2345: Argument of type '{ status: string; }' is not assignable to parameter of type 'never'.
+app/snap.tsx(210,17): error TS2345: Argument of type '{ status: string; }' is not assignable to parameter of type 'never'.

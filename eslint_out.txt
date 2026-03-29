@@ -1,0 +1,39 @@
+﻿
+D:\SELF IMPROVEMENT\discipline-os-app\app\(tabs)\community.tsx
+  584:62  error  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+D:\SELF IMPROVEMENT\discipline-os-app\app\(tabs)\index.tsx
+  275:42  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  275:60  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+D:\SELF IMPROVEMENT\discipline-os-app\app\(tabs)\profile.tsx
+  97:13   error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  97:142  error  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+  97:154  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+D:\SELF IMPROVEMENT\discipline-os-app\app\+not-found.tsx
+  9:53  error  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+D:\SELF IMPROVEMENT\discipline-os-app\app\snap.tsx
+  284:13  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  284:23  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+D:\SELF IMPROVEMENT\discipline-os-app\components\challenges\ActiveChallengeCard.tsx
+  52:29  error  React Hook "useMissionStore" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+D:\SELF IMPROVEMENT\discipline-os-app\supabase\functions\calculate-discipline-score\index.ts
+  1:23  error  Unable to resolve path to module 'https://deno.land/std@0.168.0/http/server.ts'  import/no-unresolved
+  2:30  error  Unable to resolve path to module 'https://esm.sh/@supabase/supabase-js@2'        import/no-unresolved
+
+D:\SELF IMPROVEMENT\discipline-os-app\supabase\functions\generate-initial-protocol\index.ts
+  1:23  error  Unable to resolve path to module 'https://deno.land/std@0.168.0/http/server.ts'  import/no-unresolved
+
+D:\SELF IMPROVEMENT\discipline-os-app\supabase\functions\send-nudge\index.ts
+  1:23  error  Unable to resolve path to module 'https://deno.land/std@0.168.0/http/server.ts'  import/no-unresolved
+  2:30  error  Unable to resolve path to module 'https://esm.sh/@supabase/supabase-js@2'        import/no-unresolved
+
+D:\SELF IMPROVEMENT\discipline-os-app\supabase\functions\trigger-ai-feedback\index.ts
+  1:23  error  Unable to resolve path to module 'https://deno.land/std@0.168.0/http/server.ts'  import/no-unresolved
+
+Γ£û 16 problems (16 errors, 0 warnings)
+

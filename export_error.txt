@@ -1,0 +1,31 @@
+﻿env: load .env
+env: export EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY
+React Compiler enabled
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+iOS Bundling failed 900ms node_modules\expo-router\entry.js (1 module)
+node.exe : SyntaxError: node
+_modules\expo-router\entry.j
+s: [BABEL] D:\SELF IMPROVEME
+NT\discipline-os-app\node_mo
+dules\expo-router\entry.js: 
+.plugins is not a valid 
+Plugin property
+At line:1 char:1
++ & "C:\Program 
+Files\nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpe    cified: 
+(SyntaxE    rror: 
+no...Plugi    n 
+property:Strin    g) [], 
+RemoteExc    eption
+    + FullyQualified    
+ErrorId : Native    
+CommandError
+ 

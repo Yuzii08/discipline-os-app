@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Cadence | Professional Discipline OS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300..700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "eggshell": "#F9F7F2",
+                        "sage": "#81B29A",
+                        "terracotta": "#E07A5F",
+                        "mustard": "#F2CC8F",
+                        "charcoal": "#3D405B",
+                        "primary": "#E07A5F",
+                    },
+                    fontFamily: {
+                        "display": ["Quicksand", "sans-serif"],
+                        "sans": ["Quicksand", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "clay": "2rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+.clay-card {
+    background: #F9F7F2;
+    border-radius: 2rem;
+    box-shadow: 
+        inset 4px 4px 8px rgba(255,255,255,0.8), 
+        inset -4px -4px 8px rgba(184, 172, 160, 0.3),
+        12px 12px 24px rgba(184, 172, 160, 0.4);
+    border: 1px solid rgba(255,255,255,0.4);
+}
+
+.clay-stamp {
+    background: #F9F7F2;
+    box-shadow: 
+        inset -6px -6px 12px rgba(255,255,255,0.8), 
+        inset 8px 8px 16px rgba(0,0,0,0.1);
+    border-radius: 1.5rem;
+}
+
+.clay-tile-sage {
+    background: #81B29A;
+    box-shadow: 
+        inset 6px 6px 12px rgba(255,255,255,0.3),
+        inset -6px -6px 12px rgba(0,0,0,0.15),
+        10px 10px 20px rgba(129, 178, 154, 0.4);
+}
+
+.clay-tile-terracotta {
+    background: #E07A5F;
+    box-shadow: 
+        inset 6px 6px 12px rgba(255,255,255,0.3),
+        inset -6px -6px 12px rgba(0,0,0,0.15),
+        10px 10px 20px rgba(224, 122, 95, 0.4);
+}
+
+.clay-tile-mustard {
+    background: #F2CC8F;
+    box-shadow: 
+        inset 6px 6px 12px rgba(255,255,255,0.3),
+        inset -6px -6px 12px rgba(0,0,0,0.15),
+        10px 10px 20px rgba(242, 204, 143, 0.4);
+}
+
+.clay-tile-pressed {
+    box-shadow: 
+        inset 10px 10px 20px rgba(0,0,0,0.15),
+        inset -10px -10px 20px rgba(255,255,255,0.1);
+    transform: translateY(2px);
+}
+
+.squad-thread {
+    height: 2px;
+    background: repeating-linear-gradient(90deg, #3D405B, #3D405B 4px, transparent 4px, transparent 8px);
+    opacity: 0.3;
+}
+
+.clay-bead {
+    box-shadow: inset 2px 2px 4px rgba(255,255,255,0.5), 2px 2px 6px rgba(0,0,0,0.2);
+}
+</style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+.clay-pebble {
+    width: 60px;
+    height: 45px;
+    background: #ec7355;
+    border-radius: 60% 40% 70% 30% / 50% 50% 50% 50%;
+    position: absolute;
+    top: 15%;
+    right: 5%;
+    z-index: -1;
+    transform: rotate(-15deg);
+    box-shadow: 
+        inset 6px 6px 12px rgba(255,255,255,0.4),
+        inset -6px -6px 12px rgba(0,0,0,0.15),
+        15px 15px 30px rgba(236, 115, 85, 0.2);
+    filter: blur(0.5px);
+}
+
+.clay-pebble::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: inherit;
+    border-radius: inherit;
+    top: 10px;
+    left: 10px;
+    z-index: -2;
+    filter: blur(15px);
+    opacity: 0.3;
+}
+</style></head>
+<body class="bg-eggshell font-display text-charcoal min-h-screen flex flex-col paper-texture">
+<!-- Top Navigation / Header -->
+<nav class="flex items-center justify-between px-8 pt-8 pb-4 max-w-5xl mx-auto w-full">
+<div class="flex flex-col">
+<h1 class="text-3xl font-black tracking-tight text-charcoal">Cadence</h1>
+<p class="text-xs font-bold text-charcoal/40 uppercase tracking-[0.2em]">Operational Metrics</p>
+</div>
+<div class="clay-tile-sage rounded-2xl px-8 py-4 flex items-center gap-4 relative overflow-hidden">
+<div class="flex flex-col items-end">
+<span class="text-[10px] font-black text-white/70 uppercase tracking-widest leading-none">Consistency Index</span>
+<span class="text-3xl font-black text-white leading-none">94%</span>
+</div>
+<div class="clay-stamp w-12 h-12 flex items-center justify-center">
+<span class="material-symbols-outlined text-sage !text-3xl fill-1">verified</span>
+</div>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 max-w-5xl mx-auto w-full px-6 py-8 grid grid-cols-1 md:grid-cols-12 gap-8">
+<!-- Mission Tray (Left Column) -->
+<div class="md:col-span-8 flex flex-col gap-6">
+<div class="flex items-center justify-between px-2">
+<h2 class="text-xl font-bold tracking-tight text-slate-800">Mission Tray</h2>
+<span class="text-sm font-semibold text-slate-400">Quarterly Session: Q3</span>
+</div>
+<div class="grid grid-cols-1 gap-4">
+<!-- BODY -->
+<div class="clay-tile-sage rounded-clay p-8 flex items-center justify-between group cursor-pointer active:scale-95 transition-all">
+<div class="flex items-center gap-8">
+<div class="bg-white/30 p-5 rounded-2xl clay-card border-none">
+<span class="material-symbols-outlined text-white !text-5xl">fitness_center</span>
+</div>
+<div class="flex flex-col">
+<span class="text-white/60 font-black text-xs uppercase tracking-[0.3em]">Protocol A1</span>
+<span class="text-white text-4xl font-black">BODY</span>
+</div>
+</div>
+<div class="bg-white/20 px-6 py-3 rounded-full text-white font-black text-xs uppercase tracking-widest clay-stamp border-none shadow-inner">
+        Audit Pending
+    </div>
+</div>
+<!-- MIND (Pressed) -->
+<div class="clay-tile-terracotta clay-tile-pressed rounded-clay p-8 flex items-center justify-between group cursor-pointer active:scale-95 transition-all">
+<div class="flex items-center gap-8">
+<div class="bg-white/30 p-5 rounded-2xl clay-card border-none">
+<span class="material-symbols-outlined text-white !text-5xl">psychology</span>
+</div>
+<div class="flex flex-col">
+<span class="text-white/60 font-black text-xs uppercase tracking-[0.3em]">Protocol B4</span>
+<span class="text-white text-4xl font-black">MIND</span>
+</div>
+</div>
+<div class="bg-white/40 px-6 py-3 rounded-full text-white font-black text-xs uppercase tracking-widest">
+        Completed
+    </div>
+</div>
+<!-- WORK -->
+<div class="clay-tile-mustard rounded-clay p-8 flex items-center justify-between group cursor-pointer active:scale-95 transition-all">
+<div class="flex items-center gap-8">
+<div class="bg-white/30 p-5 rounded-2xl clay-card border-none">
+<span class="material-symbols-outlined text-white !text-5xl">terminal</span>
+</div>
+<div class="flex flex-col">
+<span class="text-white/60 font-black text-xs uppercase tracking-[0.3em]">Protocol C7</span>
+<span class="text-white text-4xl font-black">WORK</span>
+</div>
+</div>
+<div class="bg-white/20 px-6 py-3 rounded-full text-white font-black text-xs uppercase tracking-widest clay-stamp border-none shadow-inner">
+        Active
+    </div>
+</div>
+</div>
+</div>
+<!-- Right Column / Ledger & Bench -->
+<div class="md:col-span-4 flex flex-col gap-8">
+<!-- Peer Benchmarking -->
+<section class="clay-card rounded-xl p-6 flex flex-col gap-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary">groups</span>
+<h3 class="font-bold text-sm uppercase tracking-wider text-slate-500 text-charcoal/60 font-black">Peer Benchmarking</h3>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<span class="text-sm font-medium text-slate-700">Cohort Average</span>
+<span class="text-sm font-bold text-slate-900">88.4%</span>
+</div>
+<div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+<div class="bg-terracotta h-full rounded-full shadow-inner" style="width: 94%"></div>
+</div>
+<p class="text-[11px] text-slate-400 italic">You are currently in the top 5th percentile of your professional discipline cohort.</p>
+</div>
+</section>
+<!-- History Ledger -->
+<section class="clay-card rounded-xl p-6 flex flex-col gap-4 flex-1">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-mustard">menu_book</span>
+<h3 class="font-bold text-sm uppercase tracking-wider text-slate-500 text-charcoal/60 font-black">History Ledger</h3>
+</div>
+<div class="space-y-6">
+<div class="flex gap-4 border-l-2 border-clay-base pl-4 relative">
+<div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-sage border-4 border-background-light"></div>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-400 uppercase">Oct 24, 08:30</span>
+<span class="text-sm font-bold text-slate-800">Body Audit Finalized</span>
+</div>
+</div>
+<div class="flex gap-4 border-l-2 border-clay-base pl-4 relative">
+<div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-terracotta border-4 border-background-light"></div>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-400 uppercase">Oct 23, 22:15</span>
+<span class="text-sm font-bold text-slate-800">Mind Session Logged</span>
+</div>
+</div>
+<div class="flex gap-4 border-l-2 border-clay-base pl-4 relative">
+<div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-mustard border-4 border-background-light"></div>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-400 uppercase">Oct 23, 09:00</span>
+<span class="text-sm font-bold text-slate-800">Work Block Initiated</span>
+</div>
+</div>
+</div>
+<button class="mt-auto w-full py-3 rounded-xl border border-clay-base text-slate-500 font-bold text-xs uppercase tracking-widest hover:bg-clay-base transition-colors clay-card !rounded-2xl border-none text-charcoal/60">
+                    View Full Ledger
+                </button>
+</section>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<div class="sticky bottom-0 w-full bg-white/80 backdrop-blur-md border-t border-clay-base/50 mt-12">
+<div class="max-w-xl mx-auto flex flex-col gap-4 px-6 pb-8 pt-4">
+<!-- Squad Chain -->
+<div class="relative flex items-center justify-center gap-3 py-2">
+<div class="absolute w-full squad-thread z-0"></div>
+<div class="w-8 h-8 rounded-full bg-sage clay-bead z-10"></div>
+<div class="w-8 h-8 rounded-full bg-terracotta clay-bead z-10"></div>
+<div class="w-8 h-8 rounded-full bg-mustard clay-bead z-10"></div>
+<div class="w-8 h-8 rounded-full bg-charcoal clay-bead z-10"></div>
+<div class="w-8 h-8 rounded-full bg-sage clay-bead z-10"></div>
+</div>
+<!-- Nav Tabs -->
+<div class="flex gap-2">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-terracotta" href="#">
+<div class="flex h-12 w-12 items-center justify-center clay-card shadow-sm" data-icon="Dashboard">
+<span class="material-symbols-outlined !text-[32px] fill-1">dashboard</span>
+</div>
+<p class="text-[10px] font-black uppercase tracking-widest mt-1">Audit</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-charcoal/40 hover:text-terracotta transition-colors" href="#">
+<div class="flex h-12 items-center justify-center" data-icon="History">
+<span class="material-symbols-outlined !text-[32px]">history_edu</span>
+</div>
+<p class="text-[10px] font-black uppercase tracking-widest">Ledger</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-charcoal/40 hover:text-terracotta transition-colors" href="#">
+<div class="flex h-12 items-center justify-center" data-icon="Group">
+<span class="material-symbols-outlined !text-[32px]">diversity_3</span>
+</div>
+<p class="text-[10px] font-black uppercase tracking-widest">Bench</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-charcoal/40 hover:text-terracotta transition-colors" href="#">
+<div class="flex h-12 items-center justify-center" data-icon="Settings">
+<span class="material-symbols-outlined !text-[32px]">settings_heart</span>
+</div>
+<p class="text-[10px] font-black uppercase tracking-widest">Settings</p>
+</a>
+</div>
+</div>
+</div>
+<div class="clay-pebble opacity-60 pointer-events-none md:block hidden"></div></body></html>

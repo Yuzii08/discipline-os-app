@@ -1,0 +1,2 @@
+﻿hooks/useNotifications.ts(68,32): error TS2554: Expected 1 arguments, but got 0.
+hooks/useNotifications.ts(69,28): error TS2554: Expected 1 arguments, but got 0.
