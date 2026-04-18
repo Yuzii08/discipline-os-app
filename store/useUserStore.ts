@@ -19,7 +19,7 @@ interface UserState {
     riskLevel: 'LOW' | 'HIGH' | 'CRITICAL';
   };
   toastMessage: string | null;
-  setProfile: (profile: UserProfile) => void;
+  setProfile: (profile: UserProfile & { avatar_url?: string | null }) => void;
   setInitializing: (val: boolean) => void;
   updateScoreAndStreak: (basePoints: number, difficultyMultiplier: number, streakUp: boolean) => void;
   showToast: (msg: string) => void;

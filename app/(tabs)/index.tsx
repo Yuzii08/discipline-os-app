@@ -1,26 +1,29 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet,
-  RefreshControl, Platform,
+  RefreshControl, Platform, Image,
   StatusBar, Animated, Modal, TextInput, KeyboardAvoidingView, Alert,
 } from 'react-native';
-import Reanimated, { useAnimatedStyle, useSharedValue, withTiming, withSequence, Easing, withRepeat } from 'react-native-reanimated';
+import Reanimated, { useAnimatedStyle, useSharedValue, withTiming, Easing, withRepeat, SharedValue } from 'react-native-reanimated';
+import { MissionItem } from '../../components/MissionItem';
 
 import { useUserStore } from '../../store/useUserStore';
 import { useMissionStore } from '../../store/useMissionStore';
 import { fetchTodayMissions } from '../../services/missionService';
 import { supabase } from '../../services/supabase';
 import { useRouter } from 'expo-router';
+import { GlobalDrawerContext } from './_layout';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import {
   Dumbbell, Brain, Briefcase, ChevronRight, Zap,
-  Target, CheckCircle, Timer, Flame, Plus, X, Sparkles, Trophy, UserPlus,
+  Target, CheckCircle, Timer, Flame, Plus, X, Sparkles, Shield,
 } from 'lucide-react-native';
 
 import { useAppTheme } from '../../hooks/use-app-theme';
 import { Colors } from '../../constants/theme';
 import { useColorScheme } from '../../hooks/use-color-scheme';
+import { Shadow } from 'react-native-shadow-2';
 
 
 const getThemeTokens = (theme: any) => {
@@ -98,150 +101,55 @@ const AUDIT_TASKS = [
   { id: 'a2', title: 'Mindfulness Meditation', time: 'Next: 2:00 PM',    pts: null, done: false },
 ];
 
-// ── TaskRow Component (Extracted for Hooks) ───────────────────────────────────
-function TaskRow({ completion, now, onPress, tokens, clay, styles }: any) {
-  const { SAGE, TERR } = tokens;
-  const { clayCard } = clay;
-  const mission = completion.missions as any;
-  const done = completion.status === 'COMPLETED';
-  const failed = completion.status === 'FAILED';
-  // All tasks go through snap protocol now unless they are TIME based
-  const isTask = mission?.mission_type !== 'TIME';
-  const hasStarted = completion.started_at != null && completion.ended_at == null && completion.status === 'PENDING';
-  const isActiveTask = hasStarted && (mission?.expected_duration_mins ?? 0) > 0;
-
-  const resetStreak = useUserStore(s => s.resetStreak);
-
-  const shakeX = useSharedValue(0);
+const FragmentItem = React.memo(({ index, shatterValue, forgeBg, terrColor }: {
+  index: number;
+  shatterValue: SharedValue<number>;
+  forgeBg: string;
+  terrColor: string;
+}) => {
+  const angle = (index / 12) * Math.PI * 2;
+  const dist = 120 + ((index * 37) % 60);
   
-  let inGrace = false;
-  let timerDisplay = '';
-  let fillPct = 0;
-  let forceSubmitFail = false;
-
-  if (isActiveTask) {
-    const targetTimeMs = new Date(completion.started_at).getTime() + (mission?.expected_duration_mins || 0) * 60000;
-    const remainingMs = targetTimeMs - now;
-    const remainingSecs = Math.ceil(remainingMs / 1000);
-
-    if (remainingSecs >= 0) {
-      const mins = Math.floor(remainingSecs / 60);
-      const secs = remainingSecs % 60;
-      timerDisplay = `${mins}:${secs.toString().padStart(2, '0')}`;
-      fillPct = Math.min(100, Math.max(0, (remainingSecs / ((mission?.expected_duration_mins || 1) * 60)) * 100));
-    } else {
-      inGrace = true;
-      const graceRemainingSecs = (10 * 60) + remainingSecs;
-      if (graceRemainingSecs <= 0) {
-         timerDisplay = '-00:00';
-         fillPct = 0;
-         forceSubmitFail = true;
-      } else {
-         const mins = Math.floor(graceRemainingSecs / 60);
-         const secs = Math.abs(graceRemainingSecs % 60);
-         timerDisplay = `-${mins}:${secs.toString().padStart(2, '0')}`;
-         fillPct = Math.min(100, Math.max(0, (graceRemainingSecs / 600) * 100));
-      }
-    }
-  }
-
-  useEffect(() => {
-    if (inGrace) {
-      shakeX.value = withRepeat(withSequence(
-        withTiming(-3, { duration: 50, easing: Easing.linear }),
-        withTiming(3, { duration: 50, easing: Easing.linear })
-      ), -1, true);
-    } else {
-      shakeX.value = 0;
-    }
-  }, [inGrace]);
-
-  // Handle auto-fail trigger for judge
-  useEffect(() => {
-    if (forceSubmitFail && isActiveTask) {
-      const runGraceFail = async () => {
-         try {
-           const { data } = await supabase.from('mission_completions').select('start_image_url').eq('completion_id', completion.completion_id).single();
-           if ((data as any)?.start_image_url) {
-              const res = await supabase.functions.invoke('trigger-ai-feedback', {
-                 body: { image_1: data?.start_image_url, image_2: null, missionName: mission?.title }
-              });
-              if (res.data?.verified && res.data?.score_multiplier > 0) {
-                 await supabase.from('mission_completions').update({ status: 'COMPLETED', is_grace_period: true, points_earned: Math.round((mission?.base_reward_points || 0) * res.data.score_multiplier) }).eq('completion_id', completion.completion_id);
-                 return;
-              }
-           }
-         } catch (e) {
-            console.error(e);
-         }
-         // Lapsed Audit: Reset Streak to 0 if fake or failed
-         resetStreak();
-         // @ts-ignore
-         await supabase.from('mission_completions').update({ status: 'FAILED', is_grace_period: true } as any).eq('completion_id', completion.completion_id);
-      };
-      runGraceFail();
-    }
-  }, [forceSubmitFail, isActiveTask]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: shakeX.value }]
-  }));
-
-  const cardBaseStyle = [styles.taskRow, clayCard, !done && !failed && styles.auditCardPending];
-  const isLocked = isActiveTask && !inGrace && fillPct < 100;
-
-  if (inGrace) {
-     cardBaseStyle.push({ shadowColor: TERR, shadowOpacity: 0.8, borderColor: TERR, borderWidth: 1 } as any);
-  } else if (isLocked) {
-     // Recessed clay state for physical lock
-     cardBaseStyle.push({ shadowOffset: { width: 1, height: 1 }, shadowRadius: 2, shadowOpacity: 0.1, backgroundColor: '#EBE6DC', borderColor: 'transparent' } as any);
-  }
+  const fragmentStyle = useAnimatedStyle(() => {
+    return {
+      opacity: withTiming(shatterValue.value > 0 ? (1 - shatterValue.value) : 0, { duration: 100 }),
+      transform: [
+        { translateX: shatterValue.value * Math.cos(angle) * dist },
+        { translateY: shatterValue.value * Math.sin(angle) * dist },
+        { rotate: `${shatterValue.value * 720}deg` },
+        { scale: 1 - shatterValue.value },
+      ],
+    };
+  });
 
   return (
-    <Reanimated.View style={animatedStyle}>
-      <Pressable
-        style={cardBaseStyle}
-        onPress={onPress}
-        disabled={done || failed || isLocked}
-      >
-        <View style={[styles.auditIconBox, { backgroundColor: done ? `${SAGE}25` : (failed ? `${TERR}25` : (inGrace ? `${TERR}30` : `${TERR}15`)) }]}>
-          {done ? <CheckCircle size={20} color={SAGE} strokeWidth={2.5} /> :
-           failed ? <X size={20} color={TERR} strokeWidth={2.5} /> :
-           <Timer size={20} color={TERR} strokeWidth={2} />}
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.auditTitle}>{mission?.title || 'Protocol'}</Text>
-          <Text style={styles.auditTime}>
-            {done ? 'Verified ✓' : failed ? 'Failed ✗' : (hasStarted ? (inGrace ? 'GRACE PERIOD' : (isLocked ? 'Locked (In Progress)' : `Tap to Finish ${isTask ? 'Snap' : 'Timer'}`)) : `Tap to Start ${isTask ? 'Snap' : 'Timer'}`)}
-          </Text>
-        </View>
-
-        {isActiveTask ? (
-          <View style={{ alignItems: 'center', gap: 4 }}>
-             <View style={[styles.clayVesselSmall, inGrace && { borderColor: TERR, borderWidth: 1, backgroundColor: `${TERR}20` }]}>
-               <Reanimated.View style={[styles.claySandSmall, { height: `${fillPct}%`, backgroundColor: inGrace ? TERR : SAGE }]} />
-             </View>
-             <Text style={[styles.timerTextSmall, inGrace && { color: TERR }]}>{timerDisplay}</Text>
-          </View>
-        ) : (
-          mission?.base_reward_points > 0 && (
-             <Text style={[styles.auditPts, done && { color: SAGE }]}>+{mission.base_reward_points} pts</Text>
-          )
-        )}
-      </Pressable>
-    </Reanimated.View>
+    <Reanimated.View
+      style={[
+        {
+          position: 'absolute', width: 18, height: 18,
+          backgroundColor: index % 2 === 0 ? forgeBg : terrColor,
+          borderRadius: 4, zIndex: 50,
+        },
+        fragmentStyle,
+      ]}
+    />
   );
-}
+});
+FragmentItem.displayName = 'FragmentItem';
+
 
 export default function ForgeDashboardScreen() {
   const appTheme = useAppTheme();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const colorScheme = useColorScheme();
   const tokens = React.useMemo(() => getThemeTokens(appTheme), [appTheme]);
   const clay = React.useMemo(() => getClayStyles(tokens), [tokens]);
   const MISSIONS = React.useMemo(() => getMissionsArray(tokens), [tokens]);
   const styles = React.useMemo(() => createStyles(tokens), [tokens]);
   const { BG, CHR, SAGE, TERR, MUST, EGSHELL, isDark } = tokens;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { clayCard, clayRaised, clayInset, clayStamp } = clay;
+  const { openDrawer } = React.useContext(GlobalDrawerContext);
 
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
@@ -251,12 +159,26 @@ export default function ForgeDashboardScreen() {
   const [newCat, setNewCat]         = useState<'BODY'|'MIND'|'WORK'>('BODY');
   const [newType, setNewType]       = useState<'TASK'|'TIME'>('TASK');
   const [newDuration, setNewDuration] = useState('30');
-  const [newPts, setNewPts]         = useState('20');
-  const [newWager, setNewWager]     = useState<number>(0);
-  const [creating, setCreating]     = useState(false);
-  const [estimating, setEstimating] = useState(false);
-  const [aiReasoning, setAiReasoning] = useState<string | null>(null);
+   
+    const [creating, setCreating]     = useState(false);
   const quoteOfDay = QUOTES[new Date().getDay() % QUOTES.length];
+
+  // ── Deterministic point formula ───────────────────────────────────────────
+  // Same formula for ALL users. Editing is disabled.
+  // Base: category weight x type multiplier x duration factor
+  const calcPoints = (cat: 'BODY'|'MIND'|'WORK', type: 'TASK'|'TIME', durationMins: number): number => {
+    const catBase: Record<string, number> = { BODY: 15, MIND: 20, WORK: 18 };
+    const typeMulti = type === 'TIME' ? 1.0 : 1.2; // Snap (photo) is harder = +20%
+    const durFactor = type === 'TIME' ? Math.min(3.0, Math.max(0.5, durationMins / 30)) : 1.0;
+    return Math.round(catBase[cat] * typeMulti * durFactor);
+  };
+
+  const computedPts = calcPoints(
+    newCat,
+    newType,
+    newType === 'TIME' ? Number(newDuration) || 30 : 30
+  );
+
 
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -264,7 +186,9 @@ export default function ForgeDashboardScreen() {
     return () => clearInterval(int);
   }, []);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { profile, disciplineScore, currentStreak, deductPoints } = useUserStore();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { todayMissions, setTodayMissions } = useMissionStore();
 
   const loadMissions = async () => {
@@ -294,6 +218,7 @@ export default function ForgeDashboardScreen() {
   useFocusEffect(
     React.useCallback(() => {
       loadMissions();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [profile])
   );
 
@@ -301,29 +226,27 @@ export default function ForgeDashboardScreen() {
     if (!newTitle.trim() || !profile) return;
     setCreating(true);
     try {
+      // Points are always computed by the deterministic formula — never user input
+      const lockedPts = calcPoints(
+        newCat,
+        newType,
+        newType === 'TIME' ? Number(newDuration) || 30 : 30
+      );
+
       const { data: mission, error: mErr } = await supabase.from('missions').insert({
         user_id: profile.user_id,
         category: newCat,
         difficulty: 'EASY',
-        mission_type: newType, // differentiate between TASK and TIME
+        mission_type: newType,
         expected_duration_mins: newType === 'TIME' ? Number(newDuration) : null,
         title: newTitle.trim(),
-        base_reward_points: Number(newPts) || 20,
-        wager_amount: newWager,
+        base_reward_points: lockedPts,
+        
         is_recurring: false,
       } as any).select().single();
       if (mErr) throw mErr;
       const m = mission as any;
 
-      if (newWager > 0) {
-        deductPoints(newWager);
-        const { data: pData } = await supabase.from('users').select('discipline_score').eq('user_id', profile.user_id).single();
-        if (pData) {
-           await (supabase.from('users').update({ discipline_score: Math.max(0, (pData as any).discipline_score - newWager) } as any).eq('user_id', profile.user_id) as any);
-        }
-      }
-
-      // Create today's completion record
       const today = new Date().toLocaleDateString('en-CA');
       await supabase.from('mission_completions').insert({
         mission_id: m.mission_id,
@@ -333,34 +256,11 @@ export default function ForgeDashboardScreen() {
       } as any);
       setShowCreate(false);
       setNewTitle('');
-      setNewPts('20');
-      setNewWager(0);
       loadMissions();
     } catch (e: any) {
       Alert.alert('Could not create mission', e?.message || String(e));
     } finally {
       setCreating(false);
-    }
-  };
-
-  const handleTitleBlur = async () => {
-    if (!newTitle.trim() || newTitle.length < 4 || !profile) return;
-    setEstimating(true);
-    setAiReasoning(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('estimate-mission-points', {
-        body: { title: newTitle.trim(), category: newCat, type: newType }
-      });
-      if (error) throw error;
-      if (data?.points) {
-        setNewPts(String(data.points));
-        setAiReasoning(data.reasoning || null);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-    } catch (e) {
-      console.warn("AI Estimation error", e);
-    } finally {
-      setEstimating(false);
     }
   };
 
@@ -370,6 +270,10 @@ export default function ForgeDashboardScreen() {
   const targetsMet     = todayMissions.length > 0
     ? `${todayMissions.filter(m => m.status === 'COMPLETED').length}/${todayMissions.length}`
     : '8/10';
+
+  // ── AAR availability: all missions resolved (none PENDING) ────────────────
+  const allMissionsDone = todayMissions.length > 0 &&
+    todayMissions.every(m => m.status === 'COMPLETED' || m.status === 'FAILED');
 
   const handleMissionPress = (key: string) => {
     setActiveKey(prev => (prev === key ? null : key));
@@ -410,6 +314,7 @@ export default function ForgeDashboardScreen() {
        forgeScale.value = withRepeat(withTiming(1.01, { duration: 2500, easing: Easing.inOut(Easing.ease) }), -1, true);
        forgeRotate.value = withRepeat(withTiming(360, { duration: 20000, easing: Easing.linear }), -1, false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStreak]);
 
   // ── Shatter Animation Logic ──────────────────────────────────────────
@@ -424,39 +329,19 @@ export default function ForgeDashboardScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
     lastStreakRef.current = currentStreak;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStreak]);
 
   const renderFragments = () => {
-    return Array.from({ length: 12 }).map((_, i) => {
-      const angle = (i / 12) * Math.PI * 2;
-      const dist = 120 + Math.random() * 60;
-      
-      const fragmentStyle = useAnimatedStyle(() => {
-        return {
-          opacity: withTiming(shatterValue.value > 0 ? (1 - shatterValue.value) : 0, { duration: 100 }),
-          transform: [
-            { translateX: shatterValue.value * Math.cos(angle) * dist },
-            { translateY: shatterValue.value * Math.sin(angle) * dist },
-            { rotate: `${shatterValue.value * 720}deg` },
-            { scale: 1 - shatterValue.value },
-          ],
-        };
-      });
-
-      return (
-        <Reanimated.View
-          key={`frag-${i}`}
-          style={[
-            {
-              position: 'absolute', width: 18, height: 18,
-              backgroundColor: i % 2 === 0 ? forgeBg : TERR,
-              borderRadius: 4, zIndex: 50,
-            },
-            fragmentStyle,
-          ]}
-        />
-      );
-    });
+    return Array.from({ length: 12 }).map((_, i) => (
+      <FragmentItem
+        key={`frag-${i}`}
+        index={i}
+        shatterValue={shatterValue}
+        forgeBg={forgeBg}
+        terrColor={TERR}
+      />
+    ));
   };
 
   const forgeStyle = useAnimatedStyle(() => ({
@@ -465,6 +350,7 @@ export default function ForgeDashboardScreen() {
       { rotateZ: `${forgeRotate.value}deg` }
     ]
   }));
+
 
   let forgeBg = '#A8A3A4'; // Raw Stone
   let forgeRadius = 16;
@@ -502,6 +388,7 @@ export default function ForgeDashboardScreen() {
         Animated.timing(floatAnim2, { toValue: 0, duration: 11000, useNativeDriver: true }),
       ])
     ).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const translateY1 = floatAnim1.interpolate({ inputRange: [0, 1], outputRange: [0, -40] });
@@ -534,19 +421,22 @@ export default function ForgeDashboardScreen() {
       {/* ── Header ─────────────────────────────────────────────────── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.menuIcon}>☰</Text>
+          <Pressable onPress={openDrawer} hitSlop={10}>
+            <Text style={styles.menuIcon}>☰</Text>
+          </Pressable>
           <Text style={styles.brandName}>Cadence</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <Pressable onPress={() => router.push('/(tabs)/community')}>
-            <UserPlus size={20} color={CHR} strokeWidth={2.5} />
+          <Pressable onPress={() => router.push('/(tabs)/profile')} style={styles.avatarCircle}>
+            {(profile as any)?.avatar_url ? (
+              <Image
+                source={{ uri: (profile as any).avatar_url }}
+                style={styles.avatarImg}
+              />
+            ) : (
+              <Text style={styles.avatarLetter}>{(profile?.username || 'U')[0].toUpperCase()}</Text>
+            )}
           </Pressable>
-          <Pressable onPress={() => router.push('/leaderboard')}>
-            <Trophy size={22} color={CHR} strokeWidth={2.5} />
-          </Pressable>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarLetter}>{(profile?.username || 'U')[0].toUpperCase()}</Text>
-          </View>
         </View>
       </View>
 
@@ -596,16 +486,20 @@ export default function ForgeDashboardScreen() {
 
         {/* ── STATS GRID (2-col) ─────────────────────────────────────── */}
         <View style={styles.statsGrid}>
-          <View style={[styles.statCard, clayCard]}>
-            <Zap size={22} color={TERR} strokeWidth={2} />
-            <Text style={styles.statNum}>{focusPts}</Text>
-            <Text style={styles.statLbl}>Focus Points</Text>
-          </View>
-          <View style={[styles.statCard, clayCard]}>
-            <Target size={22} color={SAGE} strokeWidth={2} />
-            <Text style={styles.statNum}>{targetsMet}</Text>
-            <Text style={styles.statLbl}>Targets Met</Text>
-          </View>
+          <Shadow distance={6} startColor={isDark ? '#00000040' : '#B8B2A540'} offset={[2, 4]} containerStyle={{ flex: 1 }} style={{ width: '100%', borderRadius: 32 }}>
+            <View style={[styles.statCard, { flex: undefined, backgroundColor: EGSHELL, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(230,225,215,0.5)' }]}>
+              <Zap size={22} color={TERR} strokeWidth={2} />
+              <Text style={styles.statNum}>{focusPts}</Text>
+              <Text style={styles.statLbl}>Focus Points</Text>
+            </View>
+          </Shadow>
+          <Shadow distance={6} startColor={isDark ? '#00000040' : '#B8B2A540'} offset={[2, 4]} containerStyle={{ flex: 1 }} style={{ width: '100%', borderRadius: 32 }}>
+            <View style={[styles.statCard, { flex: undefined, backgroundColor: EGSHELL, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(230,225,215,0.5)' }]}>
+              <Target size={22} color={SAGE} strokeWidth={2} />
+              <Text style={styles.statNum}>{targetsMet}</Text>
+              <Text style={styles.statLbl}>Targets Met</Text>
+            </View>
+          </Shadow>
         </View>
 
 
@@ -647,17 +541,19 @@ export default function ForgeDashboardScreen() {
                 {isActive && (
                   <View style={styles.taskList}>
                     {categoryMissions.length === 0 ? (
-                      <View style={[styles.taskRow, clayCard]}>
-                        <View style={[styles.auditIconBox, { backgroundColor: `${CHR}08` }]}>
-                          <CheckCircle size={20} color={`${CHR}25`} strokeWidth={2} />
+                      <Shadow distance={8} startColor={isDark ? '#00000040' : '#B8B2A540'} offset={[2, 4]} style={{ width: '100%', borderRadius: 32 }} containerStyle={{ marginBottom: 12, width: '100%' }}>
+                        <View style={[styles.taskRow, { backgroundColor: EGSHELL, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(230,225,215,0.5)', marginBottom: 0 }]}>
+                          <View style={[styles.auditIconBox, { backgroundColor: `${CHR}08` }]}>
+                            <CheckCircle size={20} color={`${CHR}25`} strokeWidth={2} />
+                          </View>
+                          <Text style={[styles.auditTitle, { color: `${CHR}50` }]}>No tasks for {key} today</Text>
                         </View>
-                        <Text style={[styles.auditTitle, { color: `${CHR}50` }]}>No tasks for {key} today</Text>
-                      </View>
+                      </Shadow>
                     ) : (
                       categoryMissions.map(m => {
                         const done = m.status === 'COMPLETED' || m.status === 'FAILED';
                         return (
-                          <TaskRow key={m.completion_id} completion={m} now={now} onPress={() => !done && handleTaskPress(m)} />
+                          <MissionItem key={m.completion_id} completion={m} now={now} onPress={() => !done && handleTaskPress(m)} tokens={tokens} clay={clay} styles={styles} />
                         );
                       })
                     )}
@@ -668,27 +564,49 @@ export default function ForgeDashboardScreen() {
           })}
         </View>
 
+        {/* ── AFTER ACTION REPORT CTA ────────────────────────────────── */}
+        {allMissionsDone && (
+          <Pressable
+            style={[styles.aarCta, { backgroundColor: isDark ? 'rgba(232,92,92,0.12)' : 'rgba(232,92,92,0.08)', borderColor: '#E85C5C' }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+              router.push('/aar');
+            }}
+          >
+            <View style={[styles.aarIconBox]}>
+              <Shield size={22} color="#E85C5C" strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.aarCtaTitle}>Day Complete — Request Debrief</Text>
+              <Text style={styles.aarCtaSub}>Vanguard Commander is standing by</Text>
+            </View>
+            <ChevronRight size={18} color="#E85C5C" strokeWidth={2.5} />
+          </Pressable>
+        )}
+
         {/* ── DAILY AUDIT TASK CARDS ─────────────────────────────────── */}
         <View style={styles.auditHeader}>
           <Text style={styles.sectionLabel}>Daily Audit</Text>
         </View>
 
         {AUDIT_TASKS.map(task => (
-          <View key={task.id} style={[styles.auditCard, clayCard, !task.done && styles.auditCardPending]}>
-            <View style={[styles.auditIconBox, task.done ? clayStamp : {}]}>
-              {task.done
-                ? <CheckCircle size={20} color="#fff" strokeWidth={2.5} />
-                : <Timer size={20} color={`${CHR}35`} strokeWidth={2} />
-              }
+           <Shadow key={task.id} distance={8} startColor={isDark ? '#00000040' : '#B8B2A540'} offset={[2, 4]} style={{ width: '100%', borderRadius: 24 }} containerStyle={{ marginBottom: 12, width: '100%' }}>
+            <View style={[styles.auditCard, !task.done && styles.auditCardPending, { backgroundColor: EGSHELL, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(230,225,215,0.5)', marginBottom: 0 }]}>
+              <View style={[styles.auditIconBox, task.done ? clayStamp : {}]}>
+                {task.done
+                  ? <CheckCircle size={20} color="#fff" strokeWidth={2.5} />
+                  : <Timer size={20} color={`${CHR}35`} strokeWidth={2} />
+                }
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.auditTitle}>{task.title}</Text>
+                <Text style={styles.auditTime}>{task.time}</Text>
+              </View>
+              {task.pts != null && (
+                <Text style={styles.auditPts}>+{task.pts} pts</Text>
+              )}
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.auditTitle}>{task.title}</Text>
-              <Text style={styles.auditTime}>{task.time}</Text>
-            </View>
-            {task.pts != null && (
-              <Text style={styles.auditPts}>+{task.pts} pts</Text>
-            )}
-          </View>
+          </Shadow>
         ))}
 
       </ScrollView>
@@ -719,18 +637,7 @@ export default function ForgeDashboardScreen() {
               placeholderTextColor={`${CHR}35`}
               value={newTitle}
               onChangeText={setNewTitle}
-              onBlur={handleTitleBlur}
             />
-            {estimating && (
-              <Text style={{ fontSize: 10, fontWeight: '700', color: SAGE, marginTop: -8, marginBottom: 12, marginLeft: 4 }}>
-                ✨ AI Estimating rewards...
-              </Text>
-            )}
-            {aiReasoning && !estimating && (
-              <Text style={{ fontSize: 10, fontWeight: '600', color: `${CHR}50`, marginTop: -8, marginBottom: 12, marginLeft: 4, fontStyle: 'italic' }}>
-                Judge's Note: {aiReasoning}
-              </Text>
-            )}
 
             {/* Category */}
             <Text style={styles.fieldLabel}>Category</Text>
@@ -774,30 +681,17 @@ export default function ForgeDashboardScreen() {
               </>
             )}
 
-            {/* Wager */}
-            <Text style={styles.fieldLabel}>Doomsday Wager</Text>
-            <View style={styles.catRow}>
-              {([0, 50, 100, 200] as const).map(wager => (
-                <Pressable
-                  key={wager}
-                  style={[styles.catPill, newWager === wager && styles.catPillActive]}
-                  onPress={() => setNewWager(wager)}
-                >
-                  <Text style={[styles.catText, newWager === wager && { color: '#fff' }]}>{wager === 0 ? 'None' : `${wager} pts`}</Text>
-                </Pressable>
-              ))}
-            </View>
 
-            {/* Points */}
-            <Text style={styles.fieldLabel}>Reward Points</Text>
-            <TextInput
-              style={styles.fieldInput}
-              placeholder="20"
-              placeholderTextColor={`${CHR}35`}
-              value={newPts}
-              onChangeText={setNewPts}
-              keyboardType="numeric"
-            />
+            {/* Points preview — read only, computed from formula */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingHorizontal: 4 }}>
+              <View>
+                <Text style={styles.fieldLabel}>Reward Points</Text>
+                <Text style={{ fontSize: 10, color: `${CHR}40`, fontWeight: '600', marginTop: -4 }}>Auto-calculated · Equal for all</Text>
+              </View>
+              <View style={[styles.ptsBadge, { backgroundColor: `${SAGE}15`, borderColor: `${SAGE}40` }]}>
+                <Text style={[styles.ptsBadgeText, { color: SAGE }]}>+{computedPts} pts</Text>
+              </View>
+            </View>
 
             <Pressable
               style={[styles.createBtn, (!newTitle.trim() || creating) && { opacity: 0.4 }]}
@@ -871,7 +765,9 @@ const createStyles = (tokens: any) => {
   avatarCircle: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: `${SAGE}30`, alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
   },
+  avatarImg:    { width: 40, height: 40, borderRadius: 20 },
   avatarLetter: { fontSize: 16, fontWeight: '900', color: SAGE },
 
   scroll: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 130, zIndex: 2 },
@@ -1004,5 +900,28 @@ const createStyles = (tokens: any) => {
   // Create button
   createBtn:     { backgroundColor: TERR, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
   createBtnText: { color: '#fff', fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
+
+  // After Action Report CTA
+  aarCta: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    borderRadius: 20, padding: 18, marginBottom: 20,
+    borderWidth: 1.5,
+    shadowColor: '#E85C5C', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25, shadowRadius: 16, elevation: 8,
+  },
+  aarIconBox: {
+    width: 44, height: 44, borderRadius: 14,
+    backgroundColor: 'rgba(232,92,92,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  aarCtaTitle: { fontSize: 15, fontWeight: '900', color: CHR },
+  aarCtaSub:   { fontSize: 11, color: `${CHR}50`, fontWeight: '600', marginTop: 2 },
+
+  // Points badge (read-only, create modal)
+  ptsBadge: {
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 12, borderWidth: 1.5,
+  },
+  ptsBadgeText: { fontSize: 16, fontWeight: '900' },
   });
 };

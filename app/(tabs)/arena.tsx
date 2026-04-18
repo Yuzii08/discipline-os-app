@@ -1,178 +1,182 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, Pressable } from 'react-native';
+import {
+  View, Text, StyleSheet, FlatList, ActivityIndicator,
+  StatusBar, Image,
+} from 'react-native';
+import { Trophy, Medal, TrendingUp, Flame } from 'lucide-react-native';
 import { supabase } from '../../services/supabase';
 import { useUserStore } from '../../store/useUserStore';
-import { ActivityIndicator } from 'react-native';
-import { Flame, Activity, XOctagon, Trophy } from 'lucide-react-native';
 import { useThemeStyles } from '../../hooks/use-theme-styles';
 
-type ViewMode = 'RADAR' | 'GRAVEYARD' | 'RANKINGS';
+const getRankColors = (must: string, chr: string): Record<number, string> => ({ 
+  1: must, 2: '#C0C0C0', 3: '#CD7F32' 
+});
 
 export default function ArenaScreen() {
   const { tokens, styles, clay } = useThemeStyles(createStyles);
   const { BG, CHR, SAGE, TERR, MUST } = tokens;
   const { clayCard } = clay;
+  const RANK_COLORS = getRankColors(MUST, CHR);
 
   const { profile } = useUserStore();
+  const [data, setData]       = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<ViewMode>('RADAR');
-  
-  const [radar, setRadar] = useState<any[]>([]);
-  const [graveyard, setGraveyard] = useState<any[]>([]);
-  const [rankings, setRankings] = useState<any[]>([]);
 
-  const loadData = async () => {
+  const fetchData = async () => {
     setLoading(true);
-    try {
-      if (view === 'RADAR' || view === 'GRAVEYARD') {
-        const statusFilter = view === 'RADAR' ? 'PENDING' : 'FAILED';
-        
-        let query = supabase
-          .from('mission_completions')
-          .select('*, users!inner(username, current_streak, max_streak), missions!inner(title, category)')
-          .eq('status', statusFilter)
-          .order('started_at', { ascending: false, nullsFirst: false })
-          .limit(20);
-          
-        const { data, error } = await query;
-        if (!error && data) {
-           if (view === 'RADAR') {
-              const active = data.filter((c: any) => c.started_at && !c.ended_at);
-              setRadar(active);
-           } else {
-              setGraveyard(data);
-           }
-        }
-      } else if (view === 'RANKINGS') {
-        const { data, error } = await supabase
-          .from('users')
-          .select('username, current_streak, discipline_score')
-          .order('discipline_score', { ascending: false })
-          .limit(10);
-          
-        if (!error && data) setRankings(data);
-      }
-    } catch (e) {
-      console.warn("Arena fetch failed:", e);
-    }
+    const { data: rows } = await supabase
+      .from('users')
+      .select('user_id, username, discipline_score, global_rank_tier, current_streak, avatar_url')
+      .order('discipline_score', { ascending: false })
+      .limit(50);
+    setData(rows ?? []);
     setLoading(false);
   };
 
-  useEffect(() => {
-    loadData();
-  }, [view]);
+  useEffect(() => { fetchData(); }, []);
+
+  const myIdx  = data.findIndex(u => u.user_id === profile?.user_id);
+  const myRank = myIdx !== -1 ? myIdx + 1 : null;
+
+  const renderItem = ({ item, index }: any) => {
+    const rank    = index + 1;
+    const isMe    = item.user_id === profile?.user_id;
+    const rankClr = RANK_COLORS[rank] || `${CHR}15`;
+    const isMedal = rank <= 3;
+
+    return (
+      <View style={[styles.row, clayCard, isMe && styles.rowMe]}>
+        <View style={[styles.rankBox, { backgroundColor: isMedal ? rankClr : `${CHR}10` }]}>
+          {isMedal
+            ? <Medal size={16} color={rank === 1 ? '#3D405B' : '#fff'} strokeWidth={2.5} />
+            : <Text style={styles.rankNum}>{rank}</Text>
+          }
+        </View>
+        <View style={styles.avatarBubble}>
+          {item.avatar_url ? (
+            <Image source={{ uri: item.avatar_url }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatarLetter}>{(item.username || '?')[0].toUpperCase()}</Text>
+          )}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.username, isMe && { color: TERR }]}>
+            {item.username || 'Unknown'}{isMe ? ' (You)' : ''}
+          </Text>
+          <View style={styles.metaRow}>
+            <Flame size={11} color={TERR} strokeWidth={2.5} />
+            <Text style={styles.metaText}>{item.current_streak || 0}d</Text>
+            <Text style={styles.metaDot}>·</Text>
+            <Text style={styles.metaText}>{item.global_rank_tier || 'Novice'}</Text>
+          </View>
+        </View>
+        <Text style={[styles.score, isMedal && { color: TERR }]}>
+          {(item.discipline_score || 0).toLocaleString()}
+        </Text>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor={BG} />
+
+      {/* ── Header ── */}
       <View style={styles.header}>
-        <Text style={styles.brandName}>The Arena</Text>
-        <Flame size={20} color={TERR} strokeWidth={2.5} />
+        <View>
+          <Text style={styles.title}>The Arena</Text>
+          <Text style={styles.sub}>Top Vanguards</Text>
+        </View>
+        <Trophy size={28} color={MUST} strokeWidth={2} />
       </View>
 
-      <View style={styles.tabRow}>
-         <Pressable style={[styles.tabBtn, view === 'RADAR' && styles.tabBtnActive]} onPress={() => setView('RADAR')}>
-            <Activity size={16} color={view === 'RADAR' ? '#fff' : CHR} />
-            <Text style={[styles.tabText, view === 'RADAR' && { color: '#fff' }]}>Live Radar</Text>
-         </Pressable>
-         <Pressable style={[styles.tabBtn, view === 'GRAVEYARD' && styles.tabBtnActive]} onPress={() => setView('GRAVEYARD')}>
-            <XOctagon size={16} color={view === 'GRAVEYARD' ? '#fff' : CHR} />
-            <Text style={[styles.tabText, view === 'GRAVEYARD' && { color: '#fff' }]}>Graveyard</Text>
-         </Pressable>
-         <Pressable style={[styles.tabBtn, view === 'RANKINGS' && styles.tabBtnActive]} onPress={() => setView('RANKINGS')}>
-            <Trophy size={16} color={view === 'RANKINGS' ? '#fff' : CHR} />
-            <Text style={[styles.tabText, view === 'RANKINGS' && { color: '#fff' }]}>Rankings</Text>
-         </Pressable>
-      </View>
-
-      <ScrollView 
-        contentContainerStyle={styles.scroll}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={loadData} tintColor={CHR} />}
-      >
-        {view === 'RADAR' && (
-          <View style={styles.list}>
-             {radar.length === 0 && !loading && <Text style={styles.emptyText}>No users are enduring the Protocol right now.</Text>}
-             {radar.map(item => (
-                <View key={item.completion_id} style={[styles.feedCard, clayCard]}>
-                   <View style={styles.avatarCirc}><Text style={styles.avatarT}>{(item.users?.username || 'U')[0].toUpperCase()}</Text></View>
-                   <View style={{ flex: 1 }}>
-                      <Text style={styles.userName}>{item.users?.username || 'Unknown'}</Text>
-                      <Text style={styles.actionText}>Currently enduring: {item.missions?.title || 'Unknown Mission'}</Text>
-                   </View>
-                   <Activity size={16} color={SAGE} />
-                </View>
-             ))}
+      {/* ── Your Standing Card ── */}
+      {myRank && (
+        <View style={[styles.myCard, clayCard]}>
+          <TrendingUp size={18} color={SAGE} strokeWidth={2.5} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.myLabel}>Your Standing</Text>
+            <Text style={styles.myRank}>#{myRank} Globally</Text>
           </View>
-        )}
-
-        {view === 'GRAVEYARD' && (
-          <View style={styles.list}>
-             {graveyard.length === 0 && !loading && <Text style={styles.emptyText}>The Graveyard is empty. Everyone is holding the line.</Text>}
-             {graveyard.map(item => (
-                <View key={item.completion_id} style={[styles.feedCard, clayCard, { borderLeftWidth: 4, borderLeftColor: TERR }]}>
-                   <View style={[styles.avatarCirc, { backgroundColor: `${TERR}25` }]}><Text style={[styles.avatarT, { color: TERR }]}>{(item.users?.username || 'U')[0].toUpperCase()}</Text></View>
-                   <View style={{ flex: 1 }}>
-                      <Text style={styles.userName}>{item.users?.username || 'Unknown'}</Text>
-                      <Text style={styles.actionText}>Failed or lapsed: {item.missions?.title || 'Unknown Mission'}</Text>
-                   </View>
-                   <XOctagon size={16} color={TERR} />
-                </View>
-             ))}
+          <View style={[styles.tierBadge, { backgroundColor: `${SAGE}25` }]}>
+            <Text style={styles.tierText}>{profile?.global_rank_tier ?? 'Novice'}</Text>
           </View>
-        )}
+        </View>
+      )}
 
-        {view === 'RANKINGS' && (
-          <View style={styles.list}>
-             {rankings.map((user, idx) => (
-                <View key={idx} style={[styles.feedCard, clayCard]}>
-                   <Text style={styles.rankNum}>#{idx + 1}</Text>
-                   <View style={styles.avatarCirc}><Text style={styles.avatarT}>{(user.username || 'U')[0].toUpperCase()}</Text></View>
-                   <View style={{ flex: 1 }}>
-                      <Text style={[styles.userName, idx === 0 && { color: MUST, fontSize: 16 }]}>{user.username}</Text>
-                      <Text style={styles.actionText}>{user.current_streak} Day Streak</Text>
-                   </View>
-                   <Text style={styles.scoreText}>{user.discipline_score} pts</Text>
-                </View>
-             ))}
-          </View>
-        )}
-      </ScrollView>
+      {/* ── List ── */}
+      {loading ? (
+        <View style={styles.loader}>
+          <ActivityIndicator color={SAGE} size="large" />
+          <Text style={styles.loadText}>Syncing rankings...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={data}
+          keyExtractor={i => i.user_id}
+          contentContainerStyle={styles.listContent}
+          refreshing={loading}
+          onRefresh={fetchData}
+          renderItem={renderItem}
+        />
+      )}
     </View>
   );
 }
 
-const createStyles = (tokens: any) => {
-  const { BG, CHR, SAGE, TERR, MUST } = tokens;
+const createStyles = (tokens: any, clay: any) => {
+  const { BG, CHR, SAGE, TERR } = tokens;
+  
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: BG },
-  header: {
-    paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16,
+  root:    { flex: 1, backgroundColor: BG },
+  header:  {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingTop: 56, paddingHorizontal: 20, paddingBottom: 16,
   },
-  brandName: { fontSize: 24, fontWeight: '900', color: CHR, letterSpacing: -0.5 },
-  tabRow: {
-    flexDirection: 'row', paddingHorizontal: 20, gap: 10,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)', paddingBottom: 16
+  title: { fontSize: 28, fontWeight: '900', color: CHR, letterSpacing: -0.5 },
+  sub:   { fontSize: 13, color: `${CHR}50`, fontWeight: '700', marginTop: 2, letterSpacing: 0.5, textTransform: 'uppercase' },
+
+  myCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: BG, borderRadius: 24,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)',
+    paddingHorizontal: 20, paddingVertical: 16,
+    marginHorizontal: 20, marginBottom: 16,
   },
-  tabBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 12, borderRadius: 12, backgroundColor: `${CHR}08`
+  myLabel: { fontSize: 10, fontWeight: '800', color: `${CHR}50`, letterSpacing: 2, textTransform: 'uppercase' },
+  myRank:  { fontSize: 20, fontWeight: '900', color: CHR, marginTop: 2 },
+  tierBadge: { borderRadius: 100, paddingHorizontal: 14, paddingVertical: 6 },
+  tierText:  { fontSize: 11, fontWeight: '800', color: SAGE },
+
+  listContent: { paddingHorizontal: 20, paddingBottom: 120 },
+
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: BG, borderRadius: 20,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)',
+    paddingHorizontal: 16, paddingVertical: 14, marginBottom: 12,
   },
-  tabBtnActive: { backgroundColor: CHR },
-  tabText: { fontSize: 11, fontWeight: '800', color: CHR, textTransform: 'uppercase', letterSpacing: 0.5 },
-  scroll: { padding: 20, paddingBottom: 100 },
-  list: { gap: 14 },
-  emptyText: { textAlign: 'center', marginTop: 40, fontSize: 14, fontWeight: '700', color: `${CHR}40` },
-  feedCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 18
+  rowMe: { borderColor: `${TERR}40`, borderWidth: 1.5 },
+
+  rankBox: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  rankNum: { fontSize: 13, fontWeight: '900', color: `${CHR}60` },
+
+  avatarBubble: {
+    width: 40, height: 40, borderRadius: 14,
+    backgroundColor: `${SAGE}25`, alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
   },
-  avatarCirc: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: `${CHR}10`,
-    alignItems: 'center', justifyContent: 'center'
-  },
-  avatarT: { fontSize: 16, fontWeight: '900', color: CHR },
-  userName: { fontSize: 14, fontWeight: '900', color: CHR, marginBottom: 2 },
-  actionText: { fontSize: 12, fontWeight: '600', color: `${CHR}60` },
-  rankNum: { fontSize: 16, fontWeight: '900', color: `${CHR}40`, width: 24 },
-  scoreText: { fontSize: 14, fontWeight: '900', color: SAGE }
+  avatarImage: { width: 40, height: 40, borderRadius: 14 },
+  avatarLetter: { fontSize: 16, fontWeight: '900', color: SAGE },
+
+  username:  { fontSize: 14, fontWeight: '800', color: CHR },
+  metaRow:   { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  metaText:  { fontSize: 11, color: `${CHR}55`, fontWeight: '600' },
+  metaDot:   { fontSize: 11, color: `${CHR}30` },
+
+  score:  { fontSize: 15, fontWeight: '900', color: CHR },
+
+  loader:   { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadText: { fontSize: 12, color: `${CHR}50`, fontWeight: '600' },
   });
 };

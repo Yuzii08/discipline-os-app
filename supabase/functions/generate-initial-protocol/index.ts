@@ -1,105 +1,159 @@
 // @ts-nocheck
+// ══════════════════════════════════════════════════════════════
+//  PROJECT GENESIS — Protocol Architect v2  (gemini-2.5-flash)
+//  Edge Function: generate-initial-protocol
+// ══════════════════════════════════════════════════════════════
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
+// ── JSON Enforcement (Regex Trap) ──
+function extractJsonArray(raw: string): any[] | null {
+  const match = raw.match(/\[[\s\S]*\]/); // Robust regex trap for JSON array
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[0]);
+    if (!Array.isArray(parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+// ── HARDCODED VANGUARD PROTOCOL ──
+const HARDCODED_VANGUARD_PROTOCOL = [
+  { order: 1, category: "BODY", title: "60-min Vanguard Workout — Run & Condition", duration: 60, logic: "Vanguard Protocol activated. Physical reset." },
+  { order: 2, category: "MIND", title: "120-min Vanguard Deep Work", duration: 120, logic: "Vanguard Protocol activated. Deep cognitive focus." },
+  { order: 3, category: "WORK", title: "120-min Vanguard Execution Block", duration: 120, logic: "Vanguard Protocol activated. Pure output." },
+  { order: 4, category: "MIND", title: "Counter-Strike: Eliminate Distractions", duration: 0, logic: "Vanguard Protocol activated. Threat mitigated." }
+];
+
 serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
+  const {
+    primaryObjective,
+    userAims,
+    disciplineLevel,
+    biggestEnemy,
+    allocation,
+  } = await req.json().catch(() => ({}));
+
+  // ── SECURITY: API key from environment only — never hardcoded ──
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) {
+    console.error("Critical: GEMINI_API_KEY not set in environment.");
+    return new Response(
+      JSON.stringify({ missions: HARDCODED_VANGUARD_PROTOCOL, _fallback: true, timestamp: new Date().toISOString() }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+    );
+  }
+
+  // ── Allocation Math ──
+  const mindPct = allocation?.mind ?? 40;
+  const bodyPct = allocation?.body ?? 20;
+  const workPct = allocation?.work ?? 40;
+  const mindMins = Math.round((mindPct / 100) * 300);
+  const bodyMins = Math.round((bodyPct / 100) * 300);
+  const workMins = 300 - mindMins - bodyMins;
+
+  // ── OPTIMIZED PROMPT FOR SPEED ──
+  const prompt = `System: Performance Coach.
+Task: Create a 4-5 mission daily schedule.
+Goal: ${primaryObjective || "Elite Performance"}. Aims: ${userAims || "General"}. Challenge: ${biggestEnemy || "Distraction"}.
+Budget: Exactly 300 minutes. 
+Splits: BODY: ${bodyMins}m, MIND: ${mindMins}m, WORK: ${workMins}m.
+
+Rules STRICTLY ENFORCED:
+1. Practical titles ("Solve 15 Physics PYQs", "40-min run" - contextual to Goal/Aims).
+2. Exactly 300 total mins (Body=${bodyMins}, Mind=${mindMins}, Work=${workMins}).
+3. Order: Body -> Mind -> Work.
+4. Add 1 final mission "Counter-Strike: [Tactic against Challenge]" (Category: MIND, duration: 0).
+5. Math: Sum of durations MUST EQUAL EXACTLY 300. Body+Mind+Work = 300.
+
+Output ONLY valid JSON array. Schema:
+[{"order":1,"category":"BODY","title":"...","duration":60,"logic":"..."}]`;
+
+  // ── API Call with Timeout ──
   try {
-    const { goals, allocation, userContext } = await req.json();
-
-    const apiKey = Deno.env.get('GEMINI_API_KEY');
-    if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
-
-    const systemInstruction = `You are the Lead Protocol Architect. You are designing a life-operating system for a high-performing student.
-
-User Context:
-- Name: ${userContext?.name || 'User'}
-- Age: ${userContext?.age || 'Unknown'}
-- Interests: ${userContext?.interests || 'General'}
-
-Task: Based on the user's goals, generate 3 daily 'Unbreakable Missions' (BODY, MIND, WORK).
-Current Energy Allocation: BODY: ${allocation?.body || 33}%, MIND: ${allocation?.mind || 33}%, WORK: ${allocation?.work || 34}%
-User's Stated Goals: "${goals || 'General elite performance'}"
-
-Rules:
-1. BODY: Must be achievable but challenging (e.g., '30m Mobility' or '100 Pushups').
-2. MIND: Must focus on their primary study/learning goals.
-3. WORK: High-impact execution related to their personal projects or core work.
-
-Tone: Stoic, clinical, but encouraging.
-
-Output ONLY a valid JSON array with NO markdown, exactly:
-[
-  {"category": "BODY", "title": "...", "duration": 30},
-  {"category": "MIND", "title": "...", "duration": 60},
-  {"category": "WORK", "title": "...", "duration": 45}
-]`;
-
-    const geminiPayload = {
-      system_instruction: { parts: [{ text: systemInstruction }] },
-      contents: [{ parts: [{ text: "Generate my initial protocol now. Output ONLY the JSON array, no markdown." }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 512 }
-    };
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 28000);
 
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(geminiPayload),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.6,
+            maxOutputTokens: 1000,
+            responseMimeType: "application/json",
+          },
+        }),
+        signal: controller.signal,
       }
     );
+    clearTimeout(timeoutId);
 
     if (!geminiRes.ok) {
-      const errBody = await geminiRes.text();
-      throw new Error(`Gemini API returned ${geminiRes.status}: ${errBody}`);
+      const errText = await geminiRes.text().catch(() => "unreadable");
+      console.error("Gemini HTTP error:", geminiRes.status, errText);
+      throw new Error("HTTP Error");
     }
 
     const geminiData = await geminiRes.json();
-    let rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '[]';
-    
-    // First strip markdown
-    let cleanText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-    
-    // Safety fallback: if Gemini puts explanatory text around the JSON array
-    const jsonMatch = cleanText.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-       cleanText = jsonMatch[0];
+    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+
+    let missions = extractJsonArray(rawText);
+
+    if (!missions || missions.length === 0) {
+      throw new Error("JSON Array Extraction Failed");
     }
 
-    let missions = [];
-    try {
-      missions = JSON.parse(cleanText);
-    } catch (e) {
-      console.warn("Failed to parse Gemini output:", cleanText);
-      // Fallback baseline protocol
-      missions = [
-        { "category": "BODY", "title": "100 Pushups", "duration": 30 },
-        { "category": "MIND", "title": "Read 10 Pages", "duration": 30 },
-        { "category": "WORK", "title": "Deep Work Block", "duration": 120 }
-      ];
+    // ── MATH GUARD STRICT VALIDATION ──
+    let totalDuration = 0;
+    for (const m of missions) {
+      // Counter-Strike should be 0; all other tasks must be > 0.
+      if (m.duration <= 0 && !m.title.toLowerCase().includes("counter-strike")) {
+        throw new Error(`Math Guard Failure: Duration <= 0 for ${m.title}`);
+      }
+      totalDuration += (m.duration || 0);
+    }
+    
+    if (totalDuration !== 300) {
+      throw new Error(`Math Guard Failure: Total duration ${totalDuration} != 300`);
     }
 
-    return new Response(
-      JSON.stringify({ missions }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    // Assign fallback valid order explicitly
+    missions = missions
+      .sort((a: any, b: any) => (a.order ?? 99) - (b.order ?? 99))
+      .map((m: any, i: number) => ({ ...m, order: m.order ?? i + 1 }));
 
+    // Success response
+    return new Response(JSON.stringify({ missions, timestamp: new Date().toISOString() }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('Error generating protocol:', msg);
+    console.warn("Protocol generation anomaly — Vanguard fallback engaged:", msg);
+    
+    // ── VANGUARD FALLBACK ──
     return new Response(
-      JSON.stringify({ error: msg }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      JSON.stringify({ missions: HARDCODED_VANGUARD_PROTOCOL, _fallback: true, timestamp: new Date().toISOString() }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      }
     );
   }
 });

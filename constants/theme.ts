@@ -5,58 +5,65 @@ const { width, height } = Dimensions.get('window');
 // 3D Tactile / Neumorphic / Claymorphic Aesthetic
 // Soft, deep colors, large border radii, distinct directional lighting using borders and shadows.
 
-export const Colors = {
-  light: {
-    bg: {
-      primary: '#F9F7F2',
-      surface: '#FDFCF9',
-      card:    '#F9F7F2',
-      card2:   '#F0EFE9', 
-    },
-    accent:      '#3D405B', 
-    accentDim:   'rgba(61, 64, 91, 0.1)',
-    accentBorder:'#6B9FFF',
-    body:    '#E07A5F',
-    mind:    '#81B29A',
-    work:    '#F2CC8F',
-    danger:  '#E07A5F', 
-    success: '#81B29A', 
-    text: {
-      primary:   '#3D405B',
-      secondary: '#8F93A3',
-      tertiary:  '#A3A7BA', 
-      accent:    '#3D405B',
-    },
-    borderLight: 'rgba(255, 255, 255, 0.8)', 
-    borderDark:  'rgba(61, 64, 91, 0.15)', 
-    border:      'rgba(61, 64, 91, 0.1)', 
+const lightTheme = {
+  bg: {
+    primary: '#F9F7F2',
+    surface: '#FDFCF9',
+    card:    '#F9F7F2',
+    card2:   '#F0EFE9', 
   },
-  dark: {
-    bg: {
-      primary: '#1A1A1E', // Deep charcoal-purple
-      surface: '#25252B', // Slightly lighter elevated
-      card:    '#212126', // Card background
-      card2:   '#2A2A30', 
-    },
-    accent:      '#81B29A', // Sage becomes the dark mode primary contrast
-    accentDim:   'rgba(129, 178, 154, 0.15)',
-    accentBorder:'#6B9FFF',
-    body:    '#E07A5F', // Muted terracotta
-    mind:    '#81B29A', 
-    work:    '#F2CC8F', 
-    danger:  '#E07A5F', 
-    success: '#81B29A', 
-    text: {
-      primary:   '#F9F7F2', // Off-white for readability
-      secondary: '#A3A7BA',
-      tertiary:  '#6D7185', 
-      accent:    '#81B29A',
-    },
-    borderLight: 'rgba(255, 255, 255, 0.05)', 
-    borderDark:  'rgba(0, 0, 0, 0.4)', 
-    border:      'rgba(255, 255, 255, 0.08)', 
-  }
+  accent:      '#3D405B', 
+  accentDim:   'rgba(61, 64, 91, 0.1)',
+  accentBorder:'#6B9FFF',
+  body:    '#E07A5F',
+  mind:    '#81B29A',
+  work:    '#F2CC8F',
+  danger:  '#E07A5F', 
+  success: '#81B29A',
+  secondary: '#81B29A', // Sage explicitly appended
+  text: {
+    primary:   '#3D405B',
+    secondary: '#8F93A3',
+    tertiary:  '#A3A7BA', 
+    accent:    '#3D405B',
+  },
+  borderLight: 'rgba(255, 255, 255, 0.8)', 
+  borderDark:  'rgba(61, 64, 91, 0.15)', 
+  border:      'rgba(61, 64, 91, 0.1)', 
 } as const;
+
+const darkTheme = {
+  bg: {
+    primary: '#1A1A1E', // Deep charcoal-purple
+    surface: '#25252B', // Slightly lighter elevated
+    card:    '#212126', // Card background
+    card2:   '#2A2A30', 
+  },
+  accent:      '#81B29A', // Sage becomes the dark mode primary contrast
+  accentDim:   'rgba(129, 178, 154, 0.15)',
+  accentBorder:'#6B9FFF',
+  body:    '#E07A5F', // Muted terracotta
+  mind:    '#81B29A', 
+  work:    '#F2CC8F', 
+  danger:  '#E07A5F', 
+  success: '#81B29A',
+  secondary: '#E07A5F', // Terracotta explicitly appended
+  text: {
+    primary:   '#F9F7F2', // Off-white for readability
+    secondary: '#A3A7BA',
+    tertiary:  '#6D7185', 
+    accent:    '#81B29A',
+  },
+  borderLight: 'rgba(255, 255, 255, 0.05)', 
+  borderDark:  'rgba(0, 0, 0, 0.4)', 
+  border:      'rgba(255, 255, 255, 0.08)', 
+} as const;
+
+export const Colors = {
+  light: lightTheme,
+  dark: darkTheme,
+  ...lightTheme // Flat fallbacks for un-migrated components to prevent TS errors
+};
 
 // ── Spacing
 export const Spacing = {
@@ -104,7 +111,7 @@ export const Typography = {
     fontFamily: Inter,
     fontSize: 13,
     fontWeight: '700' as const,
-    color: Colors.text.secondary,
+    color: Colors.light.text.secondary,
   },
   label: {
     fontFamily: Inter,
@@ -149,12 +156,12 @@ export const Elevation = {
 
 // ── Legacy 3D block style (to be replaced by NativeWind classes, kept for build compatibility during refactor)
 export const create3DCardStyle = (): ViewStyle => ({
-  backgroundColor: Colors.bg.surface,
+  backgroundColor: Colors.light.bg.surface,
   borderRadius: Radius.lg,
 });
 
 export const CategoryConfig = {
-  BODY: { color: Colors.body, label: 'BODY', dim: 'rgba(255, 79, 121, 0.15)' },
-  MIND: { color: Colors.mind, label: 'MIND', dim: 'rgba(0, 212, 255, 0.15)' },
-  WORK: { color: Colors.work, label: 'WORK', dim: 'rgba(255, 200, 0, 0.15)' },
+  BODY: { color: Colors.light.body, label: 'BODY', dim: 'rgba(255, 79, 121, 0.15)' },
+  MIND: { color: Colors.light.mind, label: 'MIND', dim: 'rgba(0, 212, 255, 0.15)' },
+  WORK: { color: Colors.light.work, label: 'WORK', dim: 'rgba(255, 200, 0, 0.15)' },
 };

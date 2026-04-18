@@ -22,12 +22,6 @@ const clay = {
   elevation: 6,
 };
 
-// No-shadow card for Android to prevent shadow painting over siblings
-const flatCard = {
-  borderWidth: 1.5,
-  borderColor: 'rgba(0,0,0,0.08)',
-  elevation: 0,
-};
 
 const CREDENTIALS_KEY = 'discipline_os_saved_credentials';
 

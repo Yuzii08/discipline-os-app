@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  Switch, Alert, Linking
+  Switch, Alert,
 } from 'react-native';
 import {
   Bell, Shield, Moon, LogOut, ChevronRight, User,
@@ -21,7 +21,6 @@ const createStyles = (theme: typeof Colors.light | typeof Colors.dark) => {
   // Base constants
   const CHR = isDark ? '#F9F7F2' : '#3D405B';
   const SAGE = theme.accent;
-  const TERRACOTTA = theme.danger;
   const CLAY_COLOR = theme.bg.primary;
   
   const clay = {
@@ -229,7 +228,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* ── VERSION ────────────────────────────────────────────────────── */}
-        <Text style={styles.version}>Cadence v1.0.0 · Professional Discipline OS</Text>
+        <Text style={styles.version}>Cadence v1.0.0</Text>
 
       </ScrollView>
     </View>

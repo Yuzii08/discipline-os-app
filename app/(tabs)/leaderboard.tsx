@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator,
-  StatusBar, Pressable,
+  StatusBar, Image,
 } from 'react-native';
 import { Trophy, Medal, TrendingUp, Flame } from 'lucide-react-native';
 import { supabase } from '../../services/supabase';
@@ -13,7 +13,7 @@ const getRankColors = (must: string, chr: string): Record<number, string> => ({
 });
 export default function LeaderboardScreen() {
   const { tokens, styles, clay } = useThemeStyles(createStyles);
-  const { BG, CHR, SAGE, TERR, MUST, isDark } = tokens;
+  const { BG, CHR, SAGE, TERR, MUST } = tokens;
   const { clayCard } = clay;
   const RANK_COLORS = getRankColors(MUST, CHR);
 
@@ -25,7 +25,7 @@ export default function LeaderboardScreen() {
     setLoading(true);
     const { data: rows } = await supabase
       .from('users')
-      .select('user_id, username, discipline_score, global_rank_tier, current_streak')
+      .select('user_id, username, discipline_score, global_rank_tier, current_streak, avatar_url')
       .order('discipline_score', { ascending: false })
       .limit(50);
     setData(rows ?? []);
@@ -52,7 +52,11 @@ export default function LeaderboardScreen() {
           }
         </View>
         <View style={styles.avatarBubble}>
-          <Text style={styles.avatarLetter}>{(item.username || '?')[0].toUpperCase()}</Text>
+          {item.avatar_url ? (
+            <Image source={{ uri: item.avatar_url }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatarLetter}>{(item.username || '?')[0].toUpperCase()}</Text>
+          )}
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.username, isMe && { color: TERR }]}>
@@ -120,7 +124,7 @@ export default function LeaderboardScreen() {
 }
 
 const createStyles = (tokens: any, clay: any) => {
-  const { BG, CHR, SAGE, TERR, MUST } = tokens;
+  const { BG, CHR, SAGE, TERR } = tokens;
   
   return StyleSheet.create({
   root:    { flex: 1, backgroundColor: BG },
@@ -159,7 +163,9 @@ const createStyles = (tokens: any, clay: any) => {
   avatarBubble: {
     width: 40, height: 40, borderRadius: 14,
     backgroundColor: `${SAGE}25`, alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
   },
+  avatarImage: { width: 40, height: 40, borderRadius: 14 },
   avatarLetter: { fontSize: 16, fontWeight: '900', color: SAGE },
 
   username:  { fontSize: 14, fontWeight: '800', color: CHR },

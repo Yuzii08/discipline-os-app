@@ -23,11 +23,11 @@ export function RivalCard({ rivalName, rivalRankTier, pointsDifference }: Props)
     const isInGauntlet = activeChallenge?.challengeName?.includes('GAUNTLET');
     
     try {
-      const { data, error } = await supabase.functions.invoke('send-nudge', {
+      await supabase.functions.invoke('send-nudge', {
         body: { sender_id: 'local_user', receiver_id: 'rival_id', is_in_gauntlet: isInGauntlet }
       });
       showToast('Ping Deployed');
-    } catch (e) {
+    } catch {
       showToast('Ping Deployed (Mock)');
     }
     setTimeout(() => setIsPinging(false), 1000);

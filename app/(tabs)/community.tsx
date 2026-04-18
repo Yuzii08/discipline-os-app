@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable,
-  TextInput, Alert, Image, Modal,
+  View, Text, StyleSheet, ScrollView, Pressable, TouchableOpacity,
+  TextInput, Alert, Image, Modal, Dimensions,
   KeyboardAvoidingView, Platform, StatusBar,
   RefreshControl, ActivityIndicator,
 } from 'react-native';
 import {
-  Users, UserPlus, Search, Check, ChevronRight,
-  Flame, Heart, MessageCircle, Zap, Share2,
-  Camera, X, Send, MoreHorizontal, Plus, RefreshCw,
+  Search,
+  Flame, Heart, MessageCircle, Zap,
+  Camera, CameraOff, X, Send, MoreHorizontal, Plus, RefreshCw, Trash2, Expand,
 } from 'lucide-react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
@@ -16,43 +16,116 @@ import { fetchPosts, toggleLike, createPost, fetchComments, addComment } from '.
 import { useUserStore } from '../../store/useUserStore';
 import { supabase } from '../../services/supabase';
 import { useThemeStyles } from '../../hooks/use-theme-styles';
+import { decode } from 'base64-arraybuffer';
+
+const { width: SW } = Dimensions.get('window');
+
+// ── Full-Screen Lightbox ───────────────────────────────────────────────────────
+const ImageLightbox = ({ uri, visible, onClose }: { uri: string; visible: boolean; onClose: () => void }) => (
+  <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' }}>
+      <Pressable
+        style={{ position: 'absolute', top: 52, right: 20, zIndex: 10,
+          width: 44, height: 44, borderRadius: 22,
+          backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }}
+        onPress={onClose}
+      >
+        <X size={20} color="#fff" strokeWidth={2.5} />
+      </Pressable>
+      <Image
+        source={{ uri }}
+        style={{ width: SW, height: SW, borderRadius: 0 }}
+        resizeMode="contain"
+      />
+    </View>
+  </Modal>
+);
 
 // ── Post Card ─────────────────────────────────────────────────────────────────
-const PostCard = ({ post, onLike, onFire, onComment }: any) => {
+const PostCard = ({ post, onLike, onFire, onComment, onDelete, currentUserId }: any) => {
   const { tokens, styles, clay } = useThemeStyles(createStyles);
   const { CHR, TERR, MUST } = tokens;
   const { clayCard } = clay;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [lightboxUri, setLightboxUri] = useState<string | null>(null);
+  const isOwn = post.userId === currentUserId;
+
   return (
   <View style={[styles.postCard, clayCard]}>
+    {/* ── Header ── */}
     <View style={styles.postHeader}>
       <View style={styles.postAvatarBox}>
-        <Text style={{ fontSize: 18, fontWeight: '900', color: CHR }}>{(post.user || 'U')[0].toUpperCase()}</Text>
+        {post.avatarUrl ? (
+          <Image source={{ uri: post.avatarUrl }} style={{ width: 44, height: 44, borderRadius: 16 }} />
+        ) : (
+          <Text style={{ fontSize: 18, fontWeight: '900', color: CHR }}>{(post.user || 'U')[0].toUpperCase()}</Text>
+        )}
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.postUser}>{post.user}</Text>
         <Text style={styles.postMeta}>{post.protocol} · {post.time}</Text>
       </View>
-      <Pressable style={styles.postMoreBtn}>
+      <Pressable style={styles.postMoreBtn} onPress={() => setMenuOpen(v => !v)}>
         <MoreHorizontal size={18} color={`${CHR}50`} strokeWidth={2} />
       </Pressable>
     </View>
 
+    {/* ── Dropdown menu ── */}
+    {menuOpen && (
+      <View style={styles.dropdownMenu}>
+        {isOwn && (
+          <Pressable
+            style={styles.dropdownItem}
+            onPress={() => {
+              setMenuOpen(false);
+              Alert.alert('Delete Post', 'Are you sure you want to delete this snap?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => onDelete(post.id) },
+              ]);
+            }}
+          >
+            <Trash2 size={15} color="#E07A5F" strokeWidth={2.5} />
+            <Text style={[styles.dropdownItemText, { color: '#E07A5F' }]}>Delete Post</Text>
+          </Pressable>
+        )}
+        {!isOwn && (
+          <Pressable style={styles.dropdownItem} onPress={() => setMenuOpen(false)}>
+            <Text style={styles.dropdownItemText}>Report</Text>
+          </Pressable>
+        )}
+      </View>
+    )}
+
     <Text style={styles.postCaption}>{post.caption}</Text>
 
+    {/* ── Snap image / placeholder ── */}
     {post.imageUri ? (
-      <View style={styles.snapTile}>
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={() => setLightboxUri(post.imageUri)}
+        style={styles.snapTile}
+      >
         <Image
           source={{ uri: post.imageUri }}
-          style={{ width: '100%', height: '100%', borderRadius: 14 }}
+          style={{ width: '100%', height: 250, borderRadius: 16 }}
           resizeMode="cover"
         />
         <View style={styles.snapBadge}>
           <Camera size={11} color="#fff" strokeWidth={2.5} />
           <Text style={styles.snapBadgeText}>Protocol Snap</Text>
         </View>
+        <View style={styles.expandBtn}>
+          <Expand size={13} color="#fff" strokeWidth={2.5} />
+        </View>
+      </TouchableOpacity>
+    ) : (
+      <View style={[styles.snapTile, { backgroundColor: '#E5E5E5', height: 250, borderRadius: 16 }]}>
+        <CameraOff size={40} color={`${CHR}25`} strokeWidth={1.5} />
+        <Text style={{ marginTop: 12, fontSize: 13, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', color: `${CHR}60` }}>Missing Evidence</Text>
       </View>
-    ) : null}
+    )}
 
+    {/* ── Reactions ── */}
     <View style={styles.reactionRow}>
       <Pressable
         style={[styles.reactionBtn, post.likedByMe && { backgroundColor: `${TERR}20` }]}
@@ -75,6 +148,11 @@ const PostCard = ({ post, onLike, onFire, onComment }: any) => {
         <Text style={styles.reactionCount}>{post.comments}</Text>
       </Pressable>
     </View>
+
+    {/* ── Full-screen lightbox ── */}
+    {lightboxUri && (
+      <ImageLightbox uri={lightboxUri} visible={!!lightboxUri} onClose={() => setLightboxUri(null)} />
+    )}
   </View>
   );
 };
@@ -99,6 +177,7 @@ const CommentModal = ({ post, visible, onClose }: any) => {
       const mapped = dbComments.map(c => ({
         id: (c as any).comment_id,
         user: (c as any).users?.username || 'Unknown',
+        avatarUrl: (c as any).users?.avatar_url || null,
         text: (c as any).content,
         time: new Date((c as any).created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       }));
@@ -116,7 +195,8 @@ const CommentModal = ({ post, visible, onClose }: any) => {
       await addComment(post.id, profile.user_id, text.trim());
       setText('');
       loadComments(post.id);
-    } catch (e) {
+    } catch (e: any) {
+      console.warn("Could not send comment:", e);
       Alert.alert("Error", "Could not send comment.");
     }
   };
@@ -136,7 +216,13 @@ const CommentModal = ({ post, visible, onClose }: any) => {
             {!loading && comments.length === 0 && <Text style={styles.emptyText}>No comments yet.</Text>}
             {comments.map(c => (
               <View key={c.id} style={styles.commentRow}>
-                <View style={styles.commentAvatar}><Text style={{ fontSize: 14, fontWeight: '900', color: CHR }}>{c.user[0].toUpperCase()}</Text></View>
+                <View style={styles.commentAvatar}>
+                  {c.avatarUrl ? (
+                    <Image source={{ uri: c.avatarUrl }} style={{ width: 34, height: 34, borderRadius: 12 }} />
+                  ) : (
+                    <Text style={{ fontSize: 14, fontWeight: '900', color: CHR }}>{c.user[0].toUpperCase()}</Text>
+                  )}
+                </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.commentBubble}>
                     <Text style={styles.commentUser}>{c.user}</Text>
@@ -172,20 +258,22 @@ const CameraSnapModal = ({ visible, onClose, onCapture }: any) => {
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [captured, setCaptured] = useState<string | null>(null);
+  const [capturedB64, setCapturedB64] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [caption, setCaption] = useState('');
   const [posting, setPosting] = useState(false);
 
   useEffect(() => {
-    if (!visible) { setCaptured(null); setCaption(''); setPosting(false); setIsReady(false); }
+    if (!visible) { setCaptured(null); setCapturedB64(null); setCaption(''); setPosting(false); setIsReady(false); }
   }, [visible]);
 
   const takePhoto = async () => {
     if (!cameraRef.current || !isReady) return;
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.6, base64: false });
-      if (photo?.uri) setCaptured(photo.uri);
-    } catch (e) {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.6, base64: true });
+      if (photo?.uri) { setCaptured(photo.uri); setCapturedB64(photo.base64!); }
+    } catch (e: any) {
+      console.warn("Camera takePicture error:", e);
       Alert.alert('Camera error', 'Could not take photo. Try again.');
     }
   };
@@ -194,9 +282,10 @@ const CameraSnapModal = ({ visible, onClose, onCapture }: any) => {
     if (!caption.trim() || posting) return;
     setPosting(true);
     try {
-      await onCapture(caption, captured);
+      await onCapture(caption, captured, capturedB64);
       onClose();
-    } catch (e) {
+    } catch (e: any) {
+      console.warn("Failed to post snap:", e);
       Alert.alert("Failed to post", "Please try again.");
     } finally {
       setPosting(false);
@@ -301,7 +390,7 @@ type TabKey = 'feed' | 'friends' | 'discover';
 
 export default function CommunityScreen() {
   const { tokens, styles, clay } = useThemeStyles(createStyles);
-  const { BG, CHR, SAGE, TERR, MUST } = tokens;
+  const { BG, CHR, SAGE, TERR } = tokens;
   const { clayCard } = clay;
 
   const [tab, setTab]             = useState<TabKey>('feed');
@@ -327,11 +416,13 @@ export default function CommunityScreen() {
       if (data && data.length > 0) {
         const mapped = data.map((p: any) => ({
           id: p.post_id,
+          userId: p.user_id,
           user: p.users?.username || 'Unknown Operator',
+          avatarUrl: p.users?.avatar_url || null,
           time: new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           protocol: p.completion_id ? 'Verified Protocol' : 'Status Update',
           caption: p.content,
-          imageUri: p.image_url ?? null,
+          imageUri: p.image_url ?? p.mission_completions?.end_image_url ?? p.mission_completions?.start_image_url ?? null,
           likes: p.like_count || 0,
           fires: p.zap_count || 0,
           comments: p.comment_count || 0,
@@ -351,13 +442,12 @@ export default function CommunityScreen() {
     }
   };
 
-  // ── Users ──
-  const loadUsers = async (query = '') => {
+  const loadUsers = React.useCallback(async (query = '') => {
     setUsersLoading(true);
     try {
       let q = supabase
         .from('users')
-        .select('user_id, username, discipline_score, current_streak, global_rank_tier')
+        .select('user_id, username, discipline_score, current_streak, global_rank_tier, avatar_url')
         .neq('user_id', profile?.user_id || '')
         .order('discipline_score', { ascending: false })
         .limit(30);
@@ -373,12 +463,12 @@ export default function CommunityScreen() {
     } finally {
       setUsersLoading(false);
     }
-  };
+  }, [profile?.user_id]);
 
   useEffect(() => { loadFeed(); }, []);
   useEffect(() => {
     if (tab === 'friends' || tab === 'discover') loadUsers(search);
-  }, [tab]);
+  }, [tab, search, loadUsers]);
 
   const handleLike = async (id: string) => {
     if (!profile) return;
@@ -398,7 +488,18 @@ export default function CommunityScreen() {
       : p));
   };
 
-  const handleShare = async (caption: string, imageUri?: string | null) => {
+  const handleDelete = async (id: string) => {
+    setPosts(prev => prev.filter(p => p.id !== id)); // optimistic
+    try {
+      const { error } = await supabase.from('posts' as any).delete().eq('post_id', id);
+      if (error) throw error;
+    } catch (e) {
+      console.warn('Delete failed:', e);
+      loadFeed(); // revert
+    }
+  };
+
+  const handleShare = async (caption: string, imageUri?: string | null, base64Str?: string | null) => {
     if (!profile) return;
     const opt = {
       id: `opt-${Date.now()}`,
@@ -417,12 +518,23 @@ export default function CommunityScreen() {
         // Upload base64/uri to supabase storage
         const ext = 'jpg';
         const path = `community/${profile.user_id}/${Date.now()}.${ext}`;
-        const response = await fetch(imageUri);
-        const blob = await response.blob();
-        const { data: uploadData } = await supabase.storage.from('snaps').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
-        if (uploadData) {
+        
+        let uploadData, error;
+        if (base64Str) {
+          const res = await supabase.storage.from('snaps').upload(path, decode(base64Str), { contentType: 'image/jpeg', upsert: true });
+          uploadData = res.data; error = res.error;
+        } else {
+          const response = await fetch(imageUri);
+          const blob = await response.blob();
+          const res = await supabase.storage.from('snaps').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+          uploadData = res.data; error = res.error;
+        }
+
+        if (uploadData && !error) {
           const { data: urlData } = supabase.storage.from('snaps').getPublicUrl(path);
           uploadedUrl = urlData.publicUrl;
+        } else if (error) {
+          console.warn("Upload failed:", error);
         }
       }
       await createPost(profile.user_id, caption, uploadedUrl, undefined);
@@ -436,7 +548,6 @@ export default function CommunityScreen() {
 
   const handleSearchChange = (text: string) => {
     setSearch(text);
-    loadUsers(text);
   };
 
   return (
@@ -495,6 +606,8 @@ export default function CommunityScreen() {
                 onLike={handleLike}
                 onFire={handleFire}
                 onComment={(p: any) => setCommentPost(p)}
+                onDelete={handleDelete}
+                currentUserId={profile?.user_id}
               />
             ))}
           </View>
@@ -527,7 +640,11 @@ export default function CommunityScreen() {
                 onPress={() => router.push({ pathname: '/public-profile', params: { userId: user.user_id } })}
               >
                 <View style={styles.friendAvatar}>
-                  <Text style={{ fontSize: 18, fontWeight: '900', color: CHR }}>{(user.username || 'U')[0].toUpperCase()}</Text>
+                  {user.avatar_url ? (
+                    <Image source={{ uri: user.avatar_url }} style={{ width: 44, height: 44, borderRadius: 16 }} />
+                  ) : (
+                    <Text style={{ fontSize: 18, fontWeight: '900', color: CHR }}>{(user.username || 'U')[0].toUpperCase()}</Text>
+                  )}
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.friendName}>{user.username}</Text>
@@ -560,7 +677,7 @@ export default function CommunityScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const createStyles = (tokens: any, clay: any) => {
-  const { BG, CHR, SAGE, TERR, MUST } = tokens;
+  const { BG, CHR, SAGE, TERR } = tokens;
   return StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
   scroll: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 120 },
@@ -585,15 +702,15 @@ const createStyles = (tokens: any, clay: any) => {
     padding: 16, marginBottom: 16,
   },
   postHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
-  postAvatarBox: { width: 44, height: 44, borderRadius: 15, backgroundColor: `${SAGE}25`, alignItems: 'center', justifyContent: 'center' },
-  postUser: { fontSize: 14, fontWeight: '800', color: CHR },
+  postAvatarBox: { width: 44, height: 44, borderRadius: 16, backgroundColor: `${SAGE}30`, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  postUser: { fontSize: 16, fontWeight: '800', color: CHR },
   postMeta: { fontSize: 10, color: `${CHR}50`, fontWeight: '600', marginTop: 1 },
   postMoreBtn: { padding: 4 },
   postCaption: { fontSize: 14, color: `${CHR}85`, lineHeight: 21, marginBottom: 12, fontWeight: '500' },
 
   snapTile: {
-    borderRadius: 18, height: 200, alignItems: 'center', justifyContent: 'center',
-    marginBottom: 12, position: 'relative', overflow: 'hidden',
+    width: '100%', borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16, position: 'relative', overflow: 'hidden',
   },
   snapBadge: {
     position: 'absolute', bottom: 10, left: 10,
@@ -602,6 +719,27 @@ const createStyles = (tokens: any, clay: any) => {
     paddingHorizontal: 10, paddingVertical: 4,
   },
   snapBadgeText: { fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+  expandBtn: {
+    position: 'absolute', top: 10, right: 10,
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  // 3-dot dropdown
+  dropdownMenu: {
+    position: 'absolute', top: 52, right: 14, zIndex: 100,
+    backgroundColor: '#fff', borderRadius: 16,
+    paddingVertical: 6,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15, shadowRadius: 16, elevation: 12,
+    minWidth: 160, borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)',
+  },
+  dropdownItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingVertical: 12,
+  },
+  dropdownItemText: { fontSize: 14, fontWeight: '700', color: '#3D405B' },
 
   reactionRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 100, backgroundColor: `${CHR}08` },
@@ -622,7 +760,7 @@ const createStyles = (tokens: any, clay: any) => {
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)',
     padding: 14, marginBottom: 12,
   },
-  friendAvatar: { width: 48, height: 48, borderRadius: 16, backgroundColor: `${SAGE}25`, alignItems: 'center', justifyContent: 'center' },
+  friendAvatar: { width: 44, height: 44, borderRadius: 16, backgroundColor: `${SAGE}30`, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   friendName: { fontSize: 14, fontWeight: '800', color: CHR },
   friendMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   metaText: { fontSize: 11, fontWeight: '600', color: `${CHR}55` },
@@ -645,8 +783,8 @@ const createStyles = (tokens: any, clay: any) => {
   modalTitle: { fontSize: 17, fontWeight: '900', color: CHR },
 
   commentRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  commentAvatar: { width: 32, height: 32, borderRadius: 10, backgroundColor: `${SAGE}25`, alignItems: 'center', justifyContent: 'center' },
-  commentBubble: { backgroundColor: `${CHR}07`, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10 },
+  commentAvatar: { width: 34, height: 34, borderRadius: 12, backgroundColor: `${SAGE}30`, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginRight: 10 },
+  commentBubble: { backgroundColor: `${CHR}08`, borderRadius: 18, padding: 12, borderTopLeftRadius: 4 },
   commentUser: { fontSize: 12, fontWeight: '800', color: CHR, marginBottom: 3 },
   commentText: { fontSize: 13, color: `${CHR}80`, lineHeight: 18 },
   commentTime: { fontSize: 10, color: `${CHR}40`, fontWeight: '600', marginTop: 4, marginLeft: 4 },

@@ -26,7 +26,7 @@ function AuthGuard() {
     } else if (profile && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [profile, segments, isInitializing]);
+  }, [profile, segments, isInitializing, router]);
 
   return null;
 }

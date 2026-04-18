@@ -3,9 +3,6 @@ import { Text, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
-  withTiming,
-  runOnJS,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Colors, Spacing, Typography, Radius, CategoryConfig, create3DCardStyle, Elevation } from '../../constants/theme';

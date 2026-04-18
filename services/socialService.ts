@@ -6,7 +6,8 @@ export const fetchPosts = async () => {
     .from('posts')
     .select(`
       *,
-      users!posts_user_id_fkey ( username, global_rank_tier )
+      users!posts_user_id_fkey ( username, global_rank_tier, avatar_url ),
+      mission_completions!posts_completion_id_fkey ( start_image_url, end_image_url )
     `)
     .order('created_at', { ascending: false })
     .limit(50);
@@ -58,7 +59,7 @@ export const fetchComments = async (postId: string) => {
     .from('comments')
     .select(`
       *,
-      users!comments_user_id_fkey ( username )
+      users!comments_user_id_fkey ( username, avatar_url )
     `)
     .eq('post_id', postId)
     .order('created_at', { ascending: true });

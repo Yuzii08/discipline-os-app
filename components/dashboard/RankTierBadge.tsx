@@ -18,7 +18,7 @@ export function RankTierBadge({ tier, pointsToNext, progressPercent }: Props) {
 
   useEffect(() => {
     animatedWidth.value = withTiming(progressPercent, { duration: 800 });
-  }, [progressPercent]);
+  }, [progressPercent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const progressStyle = useAnimatedStyle(() => {
     return {

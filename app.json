@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "discipline-os-app",
-    "slug": "discipline-os-app",
+    "name": "Winter Arc",
+    "slug": "winter-arc-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "disciplineosapp",
+    "scheme": "winterarcapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "package": "com.disciplineos.app",
+      "package": "com.winterarc.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -35,7 +35,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Discipline OS to access your camera to verify your sessions."
+          "cameraPermission": "Allow Cadence to access your camera to verify your sessions."
         }
       ],
       [

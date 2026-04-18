@@ -13,6 +13,7 @@ export type Database = {
           expo_push_token: string | null
           rival_user_id: string | null
           squad_id: string | null
+          avatar_url: string | null
           created_at: string
         }
         Insert: {
@@ -26,6 +27,7 @@ export type Database = {
           expo_push_token?: string | null
           rival_user_id?: string | null
           squad_id?: string | null
+          avatar_url?: string | null
           created_at?: string
         }
         Update: {
@@ -39,6 +41,7 @@ export type Database = {
           expo_push_token?: string | null
           rival_user_id?: string | null
           squad_id?: string | null
+          avatar_url?: string | null
           created_at?: string
         }
       }

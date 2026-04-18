@@ -38,10 +38,42 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   setMcqAnswer: (q, answer) => set((state) => ({ 
     mcqAnswers: { ...state.mcqAnswers, [q]: answer }
   })),
-  setAllocation: (key, value) => 
-    set((state) => ({
-      allocation: { ...state.allocation, [key]: value }
-    })),
+  setAllocation: (key, value) =>
+    set((state) => {
+      // Clamp the moved slider to [0, 100]
+      const clamped = Math.max(0, Math.min(100, value));
+      const remaining = 100 - clamped;
+
+      // The other two keys
+      const others = (['body', 'mind', 'work'] as const).filter(k => k !== key);
+      const [a, b] = others;
+
+      const currentA = state.allocation[a];
+      const currentB = state.allocation[b];
+      const currentOtherTotal = currentA + currentB;
+
+      let newA: number;
+      let newB: number;
+
+      if (currentOtherTotal === 0) {
+        // Edge case: split evenly
+        newA = Math.round(remaining / 2);
+        newB = remaining - newA;
+      } else {
+        // Preserve relative ratio between the other two
+        newA = Math.round((currentA / currentOtherTotal) * remaining);
+        newB = remaining - newA;
+      }
+
+      return {
+        allocation: {
+          ...state.allocation,
+          [key]: clamped,
+          [a]: newA,
+          [b]: newB,
+        },
+      };
+    }),
   setGeneratedMissions: (missions) => set({ generatedMissions: missions }),
   setIsGenerating: (isGenerating) => set({ isGenerating }),
   reset: () => set({ 

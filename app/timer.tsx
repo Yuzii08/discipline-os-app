@@ -40,25 +40,7 @@ export default function TimerScreen() {
   const totalSecs = durationMins ? totalSeconds : (phase!.minutes * 60);
   const progress  = 1 - secondsLeft / totalSecs;
 
-  useEffect(() => {
-    if (running) {
-      intervalRef.current = setInterval(() => {
-        setSecondsLeft(prev => {
-          if (prev <= 1) {
-            clearInterval(intervalRef.current!);
-            handlePhaseComplete();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [running]);
-
-  const handlePhaseComplete = async () => {
+  const handlePhaseComplete = React.useCallback(async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Vibration.vibrate([0, 400, 200, 400]);
 
@@ -82,7 +64,25 @@ export default function TimerScreen() {
       `Up next: ${PHASES[nextIdx].label} (${PHASES[nextIdx].minutes} min)`,
       [{ text: 'Start', onPress: () => setRunning(true) }]
     );
-  };
+  }, [durationMins, completionId, phaseIdx, markMissionOptimistic]);
+
+  useEffect(() => {
+    if (running) {
+      intervalRef.current = setInterval(() => {
+        setSecondsLeft(prev => {
+          if (prev <= 1) {
+            clearInterval(intervalRef.current!);
+            handlePhaseComplete();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [running, handlePhaseComplete]);
 
   const reset = () => {
     setRunning(false);
@@ -94,9 +94,8 @@ export default function TimerScreen() {
 
   const accent = phase?.color ?? TERR;
 
-  // Arc progress (SVG-like via border hack)
-  const circumference = 2 * Math.PI * 110; // radius 110
-  const strokeDash    = circumference * progress;
+  // const circumference = 2 * Math.PI * 110; // reserved for SVG arc
+  // const strokeDash = circumference * progress; // reserved for SVG arc
 
   if (done) {
     return (

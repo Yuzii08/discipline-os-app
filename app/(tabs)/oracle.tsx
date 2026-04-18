@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, Dimensions } from 'react-native';
 import { supabase } from '../../services/supabase';
 import { useUserStore } from '../../store/useUserStore';
-import { ActivityIndicator } from 'react-native';
-import { Flame, Target, Timer, Zap, Sparkles } from 'lucide-react-native';
+import { Flame, Target, Timer, Sparkles } from 'lucide-react-native';
 
 import { useThemeStyles } from '../../hooks/use-theme-styles';
 
@@ -11,18 +10,18 @@ const screenWidth = Dimensions.get('window').width;
 
 export default function OracleScreen() {
   const { tokens, styles, clay } = useThemeStyles(createStyles);
-  const { BG, CHR, SAGE, TERR, MUST } = tokens;
+  const { CHR, SAGE, TERR } = tokens;
   const { clayCard } = clay;
 
   const { profile } = useUserStore();
   const [loading, setLoading] = useState(true);
-  const [completions, setCompletions] = useState<any[]>([]);
+  
   const [flowHour, setFlowHour] = useState<string>("TBD");
   const [totalHours, setTotalHours] = useState<number>(0);
   const [judgePassRate, setJudgePassRate] = useState<number>(0);
   const [heatmapData, setHeatmapData] = useState<number[]>([]);
 
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     if (!profile) return;
     setLoading(true);
     
@@ -38,12 +37,11 @@ export default function OracleScreen() {
       .order('created_at', { ascending: false });
 
     if (data) {
-      setCompletions(data);
       analyzeData(data);
     }
     
     setLoading(false);
-  };
+  }, [profile]);
 
   const analyzeData = (data: any[]) => {
     // 1. Heatmap Data (last 90 days)
@@ -99,7 +97,7 @@ export default function OracleScreen() {
 
   useEffect(() => {
     loadData();
-  }, [profile]);
+  }, [profile, loadData]);
 
   const getColorForIntensity = (count: number) => {
     if (count === 0) return `${CHR}10`;
@@ -173,7 +171,7 @@ export default function OracleScreen() {
 }
 
 const createStyles = (tokens: any) => {
-  const { BG, CHR, SAGE, TERR, MUST } = tokens;
+  const { BG, CHR, SAGE } = tokens;
   return StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
   header: {

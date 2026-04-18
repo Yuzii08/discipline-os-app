@@ -78,7 +78,7 @@ export function Background4D() {
       -1,
       true
     );
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- orb* are stable Reanimated shared values
 
   const orb1Style = useAnimatedStyle(() => ({
     transform: [{ translateX: orb1X.value }, { translateY: orb1Y.value }],
