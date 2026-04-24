@@ -5,8 +5,8 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Timer, Pause, Play, RotateCcw, CheckCircle, X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { supabase } from '../services/supabase';
-import { useMissionStore } from '../store/useMissionStore';
+import { handleMissionComplete } from '../services/missionService';
+
 
 const BG   = '#F9F7F2';
 const CHR  = '#3D405B';
@@ -25,7 +25,7 @@ const PHASES = [
 export default function TimerScreen() {
   const router = useRouter();
   const { completionId, title, points, durationMins } = useLocalSearchParams();
-  const { markMissionOptimistic } = useMissionStore();
+
 
   // Use mission duration if passed, otherwise Pomodoro 25min
   const totalSeconds = durationMins ? Number(durationMins) * 60 : 25 * 60;
@@ -45,11 +45,9 @@ export default function TimerScreen() {
     Vibration.vibrate([0, 400, 200, 400]);
 
     if (durationMins && completionId) {
-      // Time mission complete — mark done in DB
-      markMissionOptimistic(completionId as string);
-      await (supabase.from('mission_completions') as any)
-        .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
-        .eq('completion_id', completionId);
+      // Timed mission complete — delegate to missionService for score + DB write
+      const basePts = points ? Number(points) : 20;
+      await handleMissionComplete(completionId as string, basePts, 'EASY');
       setDone(true);
       return;
     }
@@ -64,7 +62,9 @@ export default function TimerScreen() {
       `Up next: ${PHASES[nextIdx].label} (${PHASES[nextIdx].minutes} min)`,
       [{ text: 'Start', onPress: () => setRunning(true) }]
     );
-  }, [durationMins, completionId, phaseIdx, markMissionOptimistic]);
+  }, [durationMins, completionId, phaseIdx, points]);
+
+
 
   useEffect(() => {
     if (running) {
@@ -103,7 +103,13 @@ export default function TimerScreen() {
         <CheckCircle size={80} color={SAGE} strokeWidth={1.5} />
         <Text style={styles.doneHead}>Mission Complete</Text>
         <Text style={styles.doneSub}>+{points || 0} pts earned</Text>
-        <Pressable style={styles.doneBtn} onPress={() => router.back()}>
+        <Pressable 
+          style={styles.doneBtn} 
+          onPress={() => router.replace({
+            pathname: '/(tabs)',
+            params: { showAAR: completionId }
+          })}
+        >
           <Text style={styles.doneBtnText}>Back to Dashboard</Text>
         </Pressable>
       </View>

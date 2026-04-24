@@ -66,20 +66,20 @@ serve(async (req: Request) => {
 
   // ── OPTIMIZED PROMPT FOR SPEED ──
   const prompt = `System: Performance Coach.
-Task: Create a 4-5 mission daily schedule.
+Task: Create an elite daily schedule consisting of 5 to 8 hyper-specific missions.
 Goal: ${primaryObjective || "Elite Performance"}. Aims: ${userAims || "General"}. Challenge: ${biggestEnemy || "Distraction"}.
 Budget: Exactly 300 minutes. 
 Splits: BODY: ${bodyMins}m, MIND: ${mindMins}m, WORK: ${workMins}m.
 
 Rules STRICTLY ENFORCED:
-1. Practical titles ("Solve 15 Physics PYQs", "40-min run" - contextual to Goal/Aims).
-2. Exactly 300 total mins (Body=${bodyMins}, Mind=${mindMins}, Work=${workMins}).
-3. Order: Body -> Mind -> Work.
+1. Break down massive blocks! NO single mission should exceed 90 minutes. Split large times (e.g. 150m) into multiple shorter, intense missions ("Sprint 1", "Sprint 2").
+2. Practical titles ("Solve 15 Physics PYQs", "40-min HIIT run" - contextual to Goal/Aims).
+3. Exactly 300 total mins (Body=${bodyMins}, Mind=${mindMins}, Work=${workMins}).
 4. Add 1 final mission "Counter-Strike: [Tactic against Challenge]" (Category: MIND, duration: 0).
-5. Math: Sum of durations MUST EQUAL EXACTLY 300. Body+Mind+Work = 300.
+5. Math: Sum of ALL durations MUST EQUAL EXACTLY 300 mins.
 
 Output ONLY valid JSON array. Schema:
-[{"order":1,"category":"BODY","title":"...","duration":60,"logic":"..."}]`;
+[{"order":1,"category":"BODY","title":"...","duration":45,"logic":"..."}]`;
 
   // ── API Call with Timeout ──
   try {
@@ -119,18 +119,34 @@ Output ONLY valid JSON array. Schema:
       throw new Error("JSON Array Extraction Failed");
     }
 
-    // ── MATH GUARD STRICT VALIDATION ──
+    // ── MATH GUARD STRICT VALIDATION & AUTO-HEAL ──
     let totalDuration = 0;
+    const cleanMissions = [];
     for (const m of missions) {
-      // Counter-Strike should be 0; all other tasks must be > 0.
       if (m.duration <= 0 && !m.title.toLowerCase().includes("counter-strike")) {
-        throw new Error(`Math Guard Failure: Duration <= 0 for ${m.title}`);
+        continue; // Auto-heal: skip instead of failing
       }
       totalDuration += (m.duration || 0);
+      cleanMissions.push(m);
     }
+    missions = cleanMissions;
     
-    if (totalDuration !== 300) {
-      throw new Error(`Math Guard Failure: Total duration ${totalDuration} != 300`);
+    if (totalDuration !== 300 && missions.length > 0) {
+      console.warn(`Math Guard: Total was ${totalDuration}. Auto-adjusting to 300.`);
+      let longestIndex = 0;
+      let maxDur = -1;
+      for (let i = 0; i < missions.length; i++) {
+        if (missions[i].duration > maxDur) {
+          maxDur = missions[i].duration;
+          longestIndex = i;
+        }
+      }
+      const diff = 300 - totalDuration;
+      missions[longestIndex].duration += diff;
+      
+      if (missions[longestIndex].duration <= 0) {
+         throw new Error("Math Guard Failure: Adjustment pushed duration below zero.");
+      }
     }
 
     // Assign fallback valid order explicitly

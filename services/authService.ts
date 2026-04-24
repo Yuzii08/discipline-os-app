@@ -65,31 +65,27 @@ export const AuthService = {
 
   // 4. Email Signup — returns whether email confirmation is needed
   signup: async (email: string, password: string, username: string): Promise<{ needsConfirmation: boolean }> => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    // Pass username in user_metadata so the Supabase Postgres trigger (handle_new_user) can read it
+    const { data, error } = await supabase.auth.signUp({ 
+      email, 
+      password,
+      options: {
+        emailRedirectTo: 'winterarcapp://confirm',
+        data: {
+          username: username
+        }
+      }
+    });
+    
     if (error) throw error;
 
     // If identities is empty, email confirmation is required before session is active
     const needsConfirmation = !data.session;
 
     if (data.user && !needsConfirmation) {
-      // Supabase CLI typegen requires relationship mapping
-      const { error: insertErr } = await supabase.from('users').insert({
-        user_id: data.user.id,
-        username,
-        global_rank_tier: 'INITIATE',
-        current_streak: 0,
-        max_streak: 0,
-        discipline_score: 0,
-        weekly_discipline_score: 0,
-        rival_user_id: null,
-        squad_id: null,
-      });
-
-      if (insertErr) {
-        console.error('Failed creating public user profile', insertErr);
-      } else {
-        await AuthService.fetchProfile(data.user.id);
-      }
+      // The Postgres trigger automatically creates the user record on auth.users insert.
+      // We can just fetch the profile to update local state.
+      await AuthService.fetchProfile(data.user.id);
     }
 
     return { needsConfirmation };

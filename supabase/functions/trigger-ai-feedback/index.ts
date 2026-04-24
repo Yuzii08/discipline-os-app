@@ -10,26 +10,22 @@ const corsHeaders = {
 // Helper to reliably convert a URL/Base64 to a base64 string for Gemini
 async function getBase64Image(dbString: string | null): Promise<string | null> {
   if (!dbString) return null;
-  // If it's already a raw base64 string (legacy data)
   if (!dbString.startsWith('http')) {
-      return dbString;
+    return dbString;
   }
-  
-  // It's a public URL, fetch it
   try {
-      const resp = await fetch(dbString);
-      if (!resp.ok) throw new Error("Failed to fetch image from Storage");
-      const arrayBuffer = await resp.arrayBuffer();
-      // Convert to base64 natively in Deno
-      const bytes = new Uint8Array(arrayBuffer);
-      let binary = '';
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      return btoa(binary);
+    const resp = await fetch(dbString);
+    if (!resp.ok) throw new Error("Failed to fetch image from Storage");
+    const arrayBuffer = await resp.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
   } catch (e) {
-      console.error("Image grab failed:", e);
-      return null;
+    console.error("Image grab failed:", e);
+    return null;
   }
 }
 
@@ -43,24 +39,29 @@ serve(async (req: Request) => {
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '' // We need robust access to avoid RLS loop issues in Edge
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     let start_raw = image_1;
     let end_raw = image_2;
+    let timeContext = "";
 
-    // Phase 2 Overhaul: Fetch URLs from DB directly using completionId
     if (completionId) {
-       const { data, error } = await supabase
-         .from('mission_completions')
-         .select('start_image_url, end_image_url')
-         .eq('completion_id', completionId)
-         .single();
-         
-       if (!error && data) {
-           start_raw = data.start_image_url;
-           end_raw = data.end_image_url;
-       }
+      const { data, error } = await supabase
+        .from('mission_completions')
+        .select('start_image_url, end_image_url, started_at')
+        .eq('completion_id', completionId)
+        .single();
+
+      if (!error && data) {
+        start_raw = data.start_image_url;
+        end_raw = data.end_image_url;
+        if (data.started_at) {
+          const d = new Date(data.started_at);
+          const timeString = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
+          timeContext = `The server recorded this mission starting at exactly ${timeString}. If the mission title implies a specific time constraint (e.g., 'Wake up at 5 AM' or '5 AM Routine'), YOU MUST verify if the visual evidence in the photo (like lighting, digital/analog clocks, or outdoor sky) supports this timestamp. If it is clearly bright daylight at a time it shouldn't be, or the evidence contradicts a morning wake-up, REJECT IT.`;
+        }
+      }
     }
 
     const b64_1 = await getBase64Image(start_raw);
@@ -73,8 +74,15 @@ serve(async (req: Request) => {
       );
     }
 
-    const apiKey = Deno.env.get('GEMINI_API_KEY') || 'AIzaSyDjW1loL-LvvEiw_6EPW2o_fR5Os8CoUh0';
-    if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+    // ── SECURITY: API key from environment only — never hardcoded ──
+    const apiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!apiKey) {
+      console.error('GEMINI_API_KEY not set — Judge bypassed');
+      return new Response(
+        JSON.stringify({ verified: true, message: "Judge offline. Protocol logged by bypass.", score_multiplier: 1.0 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     let prompt = "";
     let parts: any[] = [];
@@ -92,6 +100,8 @@ STRICT EVALUATION RULES:
 1. RELEVANCE: The images MUST clearly depict the subject matter of the mission. If the mission is "Read 20 Pages of Philosophy", the images MUST show a book, pages, or reading material. If the user uploads irrelevant photos (like a computer screen, a keyboard, a wall, a selfie, a room) that do not logically match the mission title, YOU MUST REJECT THEM instantly.
 2. PROGRESS: There MUST be clear visual evidence of progress, effort, or a time delta between the START and FINISH images. If the images are identical, obviously taken seconds apart without work, or show no meaningful change related to the task, YOU MUST REJECT THEM.
 3. CONTEXT: Be highly critical. Do not give the benefit of the doubt. If the evidence is weak or irrelevant to the mission title, reject it.
+
+${timeContext}
 
 Your single goal is to stop cheating, laziness, and fake uploads.
 
@@ -113,12 +123,14 @@ STRICT EVALUATION RULES:
 1. RELEVANCE: Does this start photo clearly and undeniably depict the subject matter of the mission?
 2. If the photo is irrelevant, fake, blank, or low effort, YOU MUST REJECT IT instantly.
 
+${timeContext}
+
 Let no fake photos pass.
 Tone: Clinical, harsh, and stoic.
 
 Respond ONLY with this exact JSON format (no markdown):
 {"verified": true/false, "message": "Your short ruthless verdict. Timer lapsed.", "score_multiplier": 0.5}`;
-      
+
       parts = [
         { text: prompt },
         { inlineData: { mimeType: "image/jpeg", data: b64_1 } }
@@ -130,8 +142,9 @@ Respond ONLY with this exact JSON format (no markdown):
       generationConfig: { temperature: 0.1, maxOutputTokens: 128 }
     };
 
+    // ── Increased timeout: 25s (image analysis needs more time than text) ──
     const abortController = new AbortController();
-    const timeout = setTimeout(() => abortController.abort(), 12000); // 12s timeout
+    const timeout = setTimeout(() => abortController.abort(), 25000);
 
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -142,11 +155,12 @@ Respond ONLY with this exact JSON format (no markdown):
         signal: abortController.signal
       }
     );
-    
+
     clearTimeout(timeout);
 
     if (!geminiRes.ok) {
-      console.error("Gemini API error:", geminiRes.status, await geminiRes.text());
+      const errText = await geminiRes.text().catch(() => 'unreadable');
+      console.error("Gemini API error:", geminiRes.status, errText);
       return new Response(
         JSON.stringify({ verified: true, message: "Judge offline. Protocol logged by bypass.", score_multiplier: 1.0 }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -155,7 +169,7 @@ Respond ONLY with this exact JSON format (no markdown):
 
     const geminiData = await geminiRes.json();
     let rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
-    
+
     rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     const jsonStr = jsonMatch ? jsonMatch[0] : rawText;
@@ -168,7 +182,15 @@ Respond ONLY with this exact JSON format (no markdown):
     }
 
     if (result.score_multiplier === undefined) {
-       result.score_multiplier = result.verified ? (b64_2 ? 1.0 : 0.5) : 0.0;
+      result.score_multiplier = result.verified ? (b64_2 ? 1.0 : 0.5) : 0.0;
+    }
+
+    // Save the verdict permanently to the DB
+    if (completionId) {
+      await supabase
+        .from('mission_completions')
+        .update({ aar_verdict: result.message })
+        .eq('completion_id', completionId);
     }
 
     return new Response(

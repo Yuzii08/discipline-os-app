@@ -5,15 +5,15 @@ import { StyleSheet, Platform, View } from 'react-native';
 import { DrawerLayout } from 'react-native-gesture-handler';
 import SettingsScreen from './settings';
 
-const ACTIVE   = '#E07A5F';
-const INACTIVE = 'rgba(61,64,91,0.35)';
-
+import { useThemeStyles } from '../../hooks/use-theme-styles';
 export const GlobalDrawerContext = React.createContext({
   openDrawer: () => {},
   closeDrawer: () => {}
 });
 
 export default function TabLayout() {
+  const { tokens, styles, clay } = useThemeStyles(createStyles);
+  const { BG, TERR, isDark } = tokens;
   const drawerRef = useRef<DrawerLayout>(null);
 
   const renderDrawer = () => <SettingsScreen />;
@@ -29,16 +29,16 @@ export default function TabLayout() {
         drawerPosition="left"
         renderNavigationView={renderDrawer}
       >
-        <View style={{ flex: 1, backgroundColor: '#F9F7F2' }}>
+        <View style={{ flex: 1, backgroundColor: BG }}>
           <Tabs
             screenOptions={{
               sceneStyle: { backgroundColor: 'transparent' },
               headerShown: false,
               tabBarStyle: styles.tabBar,
-              tabBarActiveTintColor: ACTIVE,
-              tabBarInactiveTintColor: INACTIVE,
+              tabBarActiveTintColor: TERR,
+              tabBarInactiveTintColor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(61,64,91,0.35)',
               tabBarLabelStyle: styles.label,
-              tabBarBackground: () => <View style={styles.tabBg} />,
+              tabBarBackground: () => <View style={[StyleSheet.absoluteFillObject, clay.clayCard, { borderRadius: 28 }]} />,
             }}
           >
             <Tabs.Screen
@@ -72,7 +72,6 @@ export default function TabLayout() {
 
             {/* Hidden tabs — kept for routing but not shown in bar */}
             <Tabs.Screen name="settings"      options={{ href: null }} />
-            <Tabs.Screen name="leaderboard"   options={{ href: null }} />
             <Tabs.Screen name="profile"       options={{ href: null }} />
             <Tabs.Screen name="edit-profile"  options={{ href: null }} />
           </Tabs>
@@ -82,7 +81,8 @@ export default function TabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (tokens: any, isDark: boolean) => {
+  return StyleSheet.create({
   tabBar: {
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 28 : 16,
@@ -93,17 +93,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
     elevation: 0,
   },
-  tabBg: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#FDFCF9',
-    borderRadius: 28,
-    shadowColor: '#B8ACA0',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.7)',
-  },
   label: {
     fontSize: 9,
     fontWeight: '800',
@@ -112,3 +101,4 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 });
+};

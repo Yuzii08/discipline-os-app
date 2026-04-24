@@ -23,14 +23,15 @@ export default function EditProfileScreen() {
 
   const router = useRouter();
   const { profile, setProfile, disciplineScore, currentStreak } = useUserStore();
-  const [username, setUsername]     = useState(profile?.username ?? '');
-  const [avatarUri, setAvatarUri]   = useState<string | null>((profile as any)?.avatar_url ?? null);
-  const [loading, setLoading]       = useState(false);
-  const [uploading, setUploading]   = useState(false);
+  const [username, setUsername] = useState(profile?.username ?? '');
+  const [bio, setBio] = useState(profile?.bio ?? '');
+  const [avatarUri, setAvatarUri] = useState<string | null>((profile as any)?.avatar_url ?? null);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  const tier      = profile?.global_rank_tier || 'Novice';
+  const tier = profile?.global_rank_tier || 'Novice';
   const tierColor = TIER_COLORS[tier] ?? '#81B29A';
-  const initial   = (username[0] || 'U').toUpperCase();
+  const initial = (username[0] || 'U').toUpperCase();
 
   const pickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -45,7 +46,7 @@ export default function EditProfileScreen() {
       quality: 0.75,
       base64: true,
     });
-    if (result.canceled || !result.assets[0]) return;
+    if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
     setUploading(true);
     try {
@@ -73,13 +74,13 @@ export default function EditProfileScreen() {
     setLoading(true);
     const { error } = await (supabase as any)
       .from('users')
-      .update({ username: trimmed })
+      .update({ username: trimmed, bio: bio.trim() })
       .eq('user_id', profile.user_id);
     setLoading(false);
     if (error) {
       Alert.alert('Update Failed', error.message);
     } else {
-      setProfile({ ...profile, username: trimmed });
+      setProfile({ ...profile, username: trimmed, bio: bio.trim() });
       router.back();
     }
   };
@@ -159,6 +160,19 @@ export default function EditProfileScreen() {
             />
           </View>
 
+          <Text style={[styles.sectionLabel, { marginTop: 20 }]}>Tactical Profile (Bio)</Text>
+          <View style={[styles.inputWrap, clayCard, { height: 100 }]}>
+            <TextInput
+              style={[styles.input, { height: '100%', paddingTop: 14, textAlignVertical: 'top' }]}
+              value={bio}
+              onChangeText={setBio}
+              placeholder="Your strategic philosophy..."
+              placeholderTextColor={`${CHR}35`}
+              multiline
+              maxLength={160}
+            />
+          </View>
+
           <Text style={[styles.sectionLabel, { marginTop: 20 }]}>Rank Tier</Text>
           <View style={[styles.inputWrap, clayCard, styles.readOnly]}>
             <Shield size={18} color={`${CHR}40`} strokeWidth={2} />
@@ -179,7 +193,7 @@ export default function EditProfileScreen() {
 const createStyles = (tokens: any, clay: any) => {
   const { BG, CHR } = tokens;
   return StyleSheet.create({
-    root:   { flex: 1, backgroundColor: BG },
+    root: { flex: 1, backgroundColor: BG },
     scroll: { paddingBottom: 60 },
 
     topBar: {
@@ -187,7 +201,7 @@ const createStyles = (tokens: any, clay: any) => {
       paddingHorizontal: 24, paddingTop: 56, paddingBottom: 8,
     },
     iconBtn: { width: 46, height: 46, borderRadius: 16, backgroundColor: `${CHR}10`, alignItems: 'center', justifyContent: 'center' },
-    title:   { fontSize: 18, fontWeight: '900', color: CHR },
+    title: { fontSize: 18, fontWeight: '900', color: CHR },
 
     heroSection: {
       alignItems: 'center', paddingTop: 28, paddingBottom: 28,
@@ -215,7 +229,7 @@ const createStyles = (tokens: any, clay: any) => {
     tierText: { fontSize: 12, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
 
     quickStats: { flexDirection: 'row', gap: 12, paddingHorizontal: 24, marginTop: 20, marginBottom: 4 },
-    quickStat:  { flex: 1, backgroundColor: BG, borderRadius: 18, padding: 16, alignItems: 'center', gap: 4 },
+    quickStat: { flex: 1, backgroundColor: BG, borderRadius: 18, padding: 16, alignItems: 'center', gap: 4 },
     quickStatNum: { fontSize: 22, fontWeight: '900', color: CHR },
     quickStatLbl: { fontSize: 9, fontWeight: '900', color: `${CHR}50`, textTransform: 'uppercase', letterSpacing: 1 },
 
@@ -223,9 +237,9 @@ const createStyles = (tokens: any, clay: any) => {
     sectionLabel: { fontSize: 10, fontWeight: '900', color: `${CHR}50`, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 },
 
     inputWrap: { borderRadius: 18, backgroundColor: BG, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
-    input:     { height: 54, paddingHorizontal: 18, fontSize: 16, fontWeight: '700', color: CHR },
+    input: { height: 54, paddingHorizontal: 18, fontSize: 16, fontWeight: '700', color: CHR },
 
-    readOnly:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, height: 54, gap: 10 },
+    readOnly: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, height: 54, gap: 10 },
     readOnlyText: { flex: 1, fontSize: 15, fontWeight: '800', color: `${CHR}70` },
     readOnlyHint: { fontSize: 11, color: `${CHR}35`, fontWeight: '600' },
 

@@ -32,11 +32,22 @@ function AuthGuard() {
 }
 
 export default function RootLayout() {
-  const { isInitializing } = useUserStore();
+  const { isInitializing, setInitializing } = useUserStore();
   useNotifications();
 
   useEffect(() => {
     AuthService.initializeAuth();
+
+    // ── Failsafe: if auth hasn't resolved in 5s, force it through ──
+    // Prevents permanent white screen on network errors or deep link edge cases
+    const failsafe = setTimeout(() => {
+      if (useUserStore.getState().isInitializing) {
+        console.warn('[AuthGuard] Failsafe triggered — forcing init complete');
+        setInitializing(false);
+      }
+    }, 5000);
+
+    return () => clearTimeout(failsafe);
   }, []);
 
   const theme = useAppTheme();

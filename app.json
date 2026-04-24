@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Winter Arc",
-    "slug": "winter-arc-app",
+    "name": "Cadence",
+    "slug": "discipline-os-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -14,7 +14,7 @@
     "android": {
       "package": "com.winterarc.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F9F7F2",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -23,11 +23,13 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
-      "output": "single-page",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -44,9 +46,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#F9F7F2",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#F9F7F2"
           }
         }
       ],
@@ -61,6 +63,12 @@
       "eas": {
         "projectId": "9609a328-8c35-47d4-9462-1aca0da8248b"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9609a328-8c35-47d4-9462-1aca0da8248b"
     }
   }
 }

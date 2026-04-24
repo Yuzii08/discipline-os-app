@@ -1,13 +1,16 @@
 import { supabase } from './supabase';
 import { useMissionStore } from '../store/useMissionStore';
 import { useUserStore } from '../store/useUserStore';
-import { Alert } from 'react-native';
+
 
 /**
  * Fetch daily pending/completed missions for a user.
  */
 export const fetchTodayMissions = async (userId: string, date: string) => {
   try {
+    // ── Pre-generation: Ensure daily completions exist ────────────────────────
+    await supabase.rpc('generate_daily_completions', { p_user_id: userId });
+
     // ── Try real Supabase data first ──────────────────────────────────────────
     const { data, error } = await supabase
       .from('mission_completions' as any)
@@ -79,8 +82,8 @@ export const handleMissionComplete = async (completionId: string, basePoints: nu
     }
 
   } catch (err) {
-    console.error("Failed to verify mission completion remotely", err);
-    // Silent fail for UX unless critical.
-    Alert.alert("Sync Issue", "Your score couldn't be precisely synced right now.");
+    // Silent fail — optimistic UI already applied. Score will re-sync on next launch.
+    console.error('Failed to verify mission completion remotely:', err);
   }
 };
+

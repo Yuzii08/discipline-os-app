@@ -7,15 +7,22 @@ import {
 } from 'react-native';
 import {
   Search,
-  Flame, Heart, MessageCircle, Zap,
+  Flame, Heart, MessageCircle, Zap, Shield, Check,
   Camera, CameraOff, X, Send, MoreHorizontal, Plus, RefreshCw, Trash2, Expand,
 } from 'lucide-react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { fetchPosts, toggleLike, createPost, fetchComments, addComment } from '../../services/socialService';
+import {
+  fetchPosts, fetchUserZaps, toggleLike, subscribeToCommunityFeed, toggleZap, createPost, fetchComments, addComment
+} from '../../services/socialService';
+import { 
+  fetchSquads, requestToJoin, fetchMyJoinRequests, 
+  fetchPendingSquadRequests, resolveRequest, JoinRequest 
+} from '../../services/squadService';
 import { useUserStore } from '../../store/useUserStore';
 import { supabase } from '../../services/supabase';
 import { useThemeStyles } from '../../hooks/use-theme-styles';
+import * as Haptics from 'expo-haptics';
 import { decode } from 'base64-arraybuffer';
 
 const { width: SW } = Dimensions.get('window');
@@ -46,6 +53,7 @@ const PostCard = ({ post, onLike, onFire, onComment, onDelete, currentUserId }: 
   const { tokens, styles, clay } = useThemeStyles(createStyles);
   const { CHR, TERR, MUST } = tokens;
   const { clayCard } = clay;
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [lightboxUri, setLightboxUri] = useState<string | null>(null);
   const isOwn = post.userId === currentUserId;
@@ -54,17 +62,27 @@ const PostCard = ({ post, onLike, onFire, onComment, onDelete, currentUserId }: 
   <View style={[styles.postCard, clayCard]}>
     {/* ── Header ── */}
     <View style={styles.postHeader}>
-      <View style={styles.postAvatarBox}>
+      <Pressable
+        style={styles.postAvatarBox}
+        onPress={() => post.userId && !isOwn &&
+          router.push({ pathname: '/public-profile', params: { userId: post.userId } })
+        }
+      >
         {post.avatarUrl ? (
           <Image source={{ uri: post.avatarUrl }} style={{ width: 44, height: 44, borderRadius: 16 }} />
         ) : (
           <Text style={{ fontSize: 18, fontWeight: '900', color: CHR }}>{(post.user || 'U')[0].toUpperCase()}</Text>
         )}
-      </View>
-      <View style={{ flex: 1 }}>
+      </Pressable>
+      <Pressable
+        style={{ flex: 1 }}
+        onPress={() => post.userId && !isOwn &&
+          router.push({ pathname: '/public-profile', params: { userId: post.userId } })
+        }
+      >
         <Text style={styles.postUser}>{post.user}</Text>
         <Text style={styles.postMeta}>{post.protocol} · {post.time}</Text>
-      </View>
+      </Pressable>
       <Pressable style={styles.postMoreBtn} onPress={() => setMenuOpen(v => !v)}>
         <MoreHorizontal size={18} color={`${CHR}50`} strokeWidth={2} />
       </Pressable>
@@ -386,7 +404,7 @@ const CameraSnapModal = ({ visible, onClose, onCapture }: any) => {
 };
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
-type TabKey = 'feed' | 'friends' | 'discover';
+type TabKey = 'feed' | 'network';
 
 export default function CommunityScreen() {
   const { tokens, styles, clay } = useThemeStyles(createStyles);
@@ -400,10 +418,13 @@ export default function CommunityScreen() {
   const [commentPost, setCommentPost] = useState<any>(null);
   const [snapOpen, setSnapOpen]   = useState(false);
 
-  // Friends tab
+  // Network tab
   const [search, setSearch]       = useState('');
   const [allUsers, setAllUsers]   = useState<any[]>([]);
-  const [usersLoading, setUsersLoading] = useState(false);
+  const [squads, setSquads]       = useState<any[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [myRequests, setMyRequests]   = useState<any[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<JoinRequest[]>([]);
 
   const { profile } = useUserStore();
   const router = useRouter();
@@ -412,7 +433,10 @@ export default function CommunityScreen() {
   const loadFeed = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const data = await fetchPosts();
+      const [data, zapSet] = await Promise.all([
+        fetchPosts(),
+        profile?.user_id ? fetchUserZaps(profile.user_id) : Promise.resolve(new Set<string>()),
+      ]);
       if (data && data.length > 0) {
         const mapped = data.map((p: any) => ({
           id: p.post_id,
@@ -427,7 +451,7 @@ export default function CommunityScreen() {
           fires: p.zap_count || 0,
           comments: p.comment_count || 0,
           likedByMe: false,
-          firedByMe: false,
+          firedByMe: zapSet.has(p.post_id),
         }));
         setPosts(mapped);
       } else {
@@ -442,38 +466,58 @@ export default function CommunityScreen() {
     }
   };
 
-  const loadUsers = React.useCallback(async (query = '') => {
-    setUsersLoading(true);
+  const loadNetwork = React.useCallback(async (query = '') => {
+    setListLoading(true);
     try {
-      let q = supabase
+      // Fetch Users
+      let uQuery = supabase
         .from('users')
         .select('user_id, username, discipline_score, current_streak, global_rank_tier, avatar_url')
         .neq('user_id', profile?.user_id || '')
         .order('discipline_score', { ascending: false })
-        .limit(30);
+        .limit(20);
 
-      if (query.trim()) {
-        q = q.ilike('username', `%${query}%`);
+      if (query.trim()) uQuery = uQuery.ilike('username', `%${query}%`);
+      const { data: userData } = await uQuery;
+      setAllUsers(userData || []);
+
+      // Fetch Squads
+      const squadData = await fetchSquads(query);
+      setSquads(squadData || []);
+
+      if (profile?.user_id) {
+        const [reqs, pReqs] = await Promise.all([
+          fetchMyJoinRequests(profile.user_id),
+          fetchPendingSquadRequests(profile.user_id)
+        ]);
+        setMyRequests(reqs || []);
+        setPendingRequests(pReqs || []);
       }
-
-      const { data } = await q;
-      setAllUsers(data || []);
     } catch (e) {
-      console.warn('User search failed:', e);
+      console.warn('Network fetch failed:', e);
     } finally {
-      setUsersLoading(false);
+      setListLoading(false);
     }
   }, [profile?.user_id]);
 
-  useEffect(() => { loadFeed(); }, []);
   useEffect(() => {
-    if (tab === 'friends' || tab === 'discover') loadUsers(search);
-  }, [tab, search, loadUsers]);
+    loadFeed();
+    // Real-time subscription
+    const unsubscribe = subscribeToCommunityFeed(() => {
+      loadFeed(); // Simple refresh for now
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'network') loadNetwork(search);
+  }, [tab, search, loadNetwork]);
 
   const handleLike = async (id: string) => {
     if (!profile) return;
     const post = posts.find(p => p.id === id);
     if (!post) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPosts(prev => prev.map(p => p.id === id
       ? { ...p, likedByMe: !p.likedByMe, likes: p.likedByMe ? p.likes - 1 : p.likes + 1 }
       : p));
@@ -482,10 +526,17 @@ export default function CommunityScreen() {
     } catch (e) { console.warn('Like failed:', e); }
   };
 
-  const handleFire = (id: string) => {
+  const handleFire = async (id: string) => {
+    if (!profile) return;
+    const post = posts.find(p => p.id === id);
+    if (!post) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPosts(prev => prev.map(p => p.id === id
       ? { ...p, firedByMe: !p.firedByMe, fires: p.firedByMe ? p.fires - 1 : p.fires + 1 }
       : p));
+    try {
+      await toggleZap(id, profile.user_id, post.firedByMe);
+    } catch (e) { console.warn('Zap failed:', e); }
   };
 
   const handleDelete = async (id: string) => {
@@ -496,6 +547,29 @@ export default function CommunityScreen() {
     } catch (e) {
       console.warn('Delete failed:', e);
       loadFeed(); // revert
+    }
+  };
+
+  const handleJoinSquad = async (squadId: string) => {
+    if (!profile) return;
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await requestToJoin(squadId, profile.user_id);
+      Alert.alert('Request Sent', 'The squad leader will review your application.');
+      loadNetwork(search);
+    } catch (e) {
+      console.warn('Join request failed:', e);
+      Alert.alert('Error', 'Could not send join request.');
+    }
+  };
+
+  const handleResolve = async (requestId: string, approve: boolean) => {
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await resolveRequest(requestId, approve);
+      loadNetwork(search);
+    } catch (e) {
+      console.warn('Resolve request failed:', e);
     }
   };
 
@@ -572,7 +646,7 @@ export default function CommunityScreen() {
 
         {/* ── TAB PILLS ── */}
         <View style={styles.tabRow}>
-          {(['feed', 'friends', 'discover'] as TabKey[]).map(key => (
+          {(['feed', 'network'] as TabKey[]).map(key => (
             <Pressable
               key={key}
               style={[styles.tabPill, tab === key && { backgroundColor: TERR }]}
@@ -613,53 +687,138 @@ export default function CommunityScreen() {
           </View>
         )}
 
-        {/* ── FRIENDS / DISCOVER ── */}
-        {(tab === 'friends' || tab === 'discover') && (
+        {/* ── NETWORK ── */}
+        {(tab === 'network') && (
           <View>
             <View style={[styles.searchBox, clayCard]}>
               <Search size={18} color={`${CHR}60`} strokeWidth={2} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search operators..."
+                placeholder="Search operators or squads..."
                 placeholderTextColor={`${CHR}40`}
                 value={search}
                 onChangeText={handleSearchChange}
               />
             </View>
 
-            {usersLoading && <ActivityIndicator color={SAGE} style={{ marginVertical: 20 }} />}
+            {listLoading && <ActivityIndicator color={SAGE} style={{ marginVertical: 20 }} />}
 
-            {!usersLoading && allUsers.length === 0 && (
-              <Text style={styles.emptyText}>No operators found.</Text>
-            )}
-
-            {allUsers.map(user => (
-              <Pressable
-                key={user.user_id}
-                style={[styles.friendCard, clayCard]}
-                onPress={() => router.push({ pathname: '/public-profile', params: { userId: user.user_id } })}
-              >
-                <View style={styles.friendAvatar}>
-                  {user.avatar_url ? (
-                    <Image source={{ uri: user.avatar_url }} style={{ width: 44, height: 44, borderRadius: 16 }} />
-                  ) : (
-                    <Text style={{ fontSize: 18, fontWeight: '900', color: CHR }}>{(user.username || 'U')[0].toUpperCase()}</Text>
-                  )}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.friendName}>{user.username}</Text>
-                  <View style={styles.friendMeta}>
-                    <Flame size={12} color={TERR} strokeWidth={2.5} />
-                    <Text style={styles.metaText}>{user.current_streak}d streak</Text>
-                    <Text style={styles.dot}>·</Text>
-                    <Text style={styles.metaText}>{Math.round(user.discipline_score || 0)} pts</Text>
+            {!listLoading && (
+              <>
+                {/* ── SQUAD MANAGEMENT (Leaders only) ── */}
+                {pendingRequests.length > 0 && (
+                  <View style={{ marginBottom: 24 }}>
+                    <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Pending Intelligence</Text>
+                    {pendingRequests.map(req => (
+                      <View key={req.id} style={[styles.friendCard, clayCard, { borderLeftWidth: 4, borderLeftColor: MUST }]}>
+                        <View style={styles.friendAvatar}>
+                          {req.user?.avatar_url ? (
+                            <Image source={{ uri: req.user.avatar_url }} style={{ width: 44, height: 44, borderRadius: 16 }} />
+                          ) : (
+                            <Text style={{ fontSize: 18, fontWeight: '900', color: CHR }}>{req.user?.username?.[0].toUpperCase()}</Text>
+                          )}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.friendName}>{req.user?.username || 'Candidate'}</Text>
+                          <Text style={styles.metaText}>Score: {req.user?.discipline_score || 0} pts</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                          <Pressable 
+                            style={[styles.smallBtn, { backgroundColor: SAGE }]}
+                            onPress={() => handleResolve(req.id, true)}
+                          >
+                            <Check size={16} color="#fff" />
+                          </Pressable>
+                          <Pressable 
+                            style={[styles.smallBtn, { backgroundColor: TERR }]}
+                            onPress={() => handleResolve(req.id, false)}
+                          >
+                            <X size={16} color="#fff" />
+                          </Pressable>
+                        </View>
+                      </View>
+                    ))}
                   </View>
-                </View>
-                <View style={styles.tierBadge}>
-                  <Text style={styles.tierText}>{user.global_rank_tier || 'Novice'}</Text>
-                </View>
-              </Pressable>
-            ))}
+                )}
+
+                {/* ── SQUADS ── */}
+                {squads.length > 0 && (
+                  <View style={{ marginBottom: 24 }}>
+                    <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Active Squads</Text>
+                    {squads.map(s => {
+                      const isMember = profile?.squad_id === s.squad_id;
+                      const hasPending = myRequests.some(r => r.squad_id === s.squad_id && r.status === 'PENDING');
+                      
+                      return (
+                        <Pressable key={s.squad_id} style={[styles.friendCard, clayCard]}>
+                          <View style={[styles.friendAvatar, { backgroundColor: MUST }]}>
+                            <Shield size={20} color="#fff" strokeWidth={2.5} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.friendName}>{s.name || 'Elite Squad'}</Text>
+                            <Text style={styles.metaText}>{s.motto || 'Strength in Discipline'}</Text>
+                          </View>
+                          
+                          <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                             {isMember ? (
+                               <View style={[styles.tierBadge, { backgroundColor: `${SAGE}15` }]}>
+                                 <Text style={[styles.tierText, { color: SAGE }]}>MEMBER</Text>
+                               </View>
+                             ) : hasPending ? (
+                               <View style={[styles.tierBadge, { backgroundColor: `${MUST}15` }]}>
+                                 <Text style={[styles.tierText, { color: MUST }]}>PENDING</Text>
+                               </View>
+                             ) : (
+                               <Pressable 
+                                 style={[styles.smallBtn, { backgroundColor: CHR }]}
+                                 onPress={() => handleJoinSquad(s.squad_id)}
+                               >
+                                 <Text style={styles.smallBtnText}>JOIN</Text>
+                               </Pressable>
+                             )}
+                             <Text style={styles.countText}>{s.member_count} active</Text>
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {/* ── OPERATORS ── */}
+                <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Elite Operators</Text>
+                {allUsers.length === 0 && (
+                  <Text style={styles.emptyText}>No operators found.</Text>
+                )}
+
+                {allUsers.map(user => (
+                  <Pressable
+                    key={user.user_id}
+                    style={[styles.friendCard, clayCard]}
+                    onPress={() => router.push({ pathname: '/public-profile', params: { userId: user.user_id } })}
+                  >
+                    <View style={styles.friendAvatar}>
+                      {user.avatar_url ? (
+                        <Image source={{ uri: user.avatar_url }} style={{ width: 44, height: 44, borderRadius: 16 }} />
+                      ) : (
+                        <Text style={{ fontSize: 18, fontWeight: '900', color: CHR }}>{(user.username || 'U')[0].toUpperCase()}</Text>
+                      )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.friendName}>{user.username}</Text>
+                      <View style={styles.friendMeta}>
+                        <Flame size={12} color={TERR} strokeWidth={2.5} />
+                        <Text style={styles.metaText}>{user.current_streak}d streak</Text>
+                        <Text style={styles.dot}>·</Text>
+                        <Text style={styles.metaText}>{Math.round(user.discipline_score || 0)} pts</Text>
+                      </View>
+                    </View>
+                    <View style={styles.tierBadge}>
+                      <Text style={styles.tierText}>{user.global_rank_tier || 'Novice'}</Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </>
+            )}
           </View>
         )}
       </ScrollView>
@@ -773,6 +932,11 @@ const createStyles = (tokens: any, clay: any) => {
   emptyTitle: { fontSize: 18, fontWeight: '900', color: `${CHR}60` },
   emptySub: { fontSize: 13, fontWeight: '600', color: `${CHR}35`, textAlign: 'center' },
   emptyText: { textAlign: 'center', marginTop: 20, color: `${CHR}40`, fontWeight: '600' },
+
+  sectionTitle: { fontSize: 11, fontWeight: '900', color: `${CHR}45`, letterSpacing: 2.5, textTransform: 'uppercase' },
+  smallBtn: { padding: 8, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  smallBtnText: { color: '#fff', fontSize: 10, fontWeight: '900' },
+  countText: { fontSize: 10, color: `${CHR}40`, fontWeight: '700' },
 
   // Comment Modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },

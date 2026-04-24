@@ -6,19 +6,24 @@ import {
 } from 'react-native';
 import Reanimated, { useAnimatedStyle, useSharedValue, withTiming, Easing, withRepeat, SharedValue } from 'react-native-reanimated';
 import { MissionItem } from '../../components/MissionItem';
+import { AARModal } from '../../components/missions/AARModal';
+import { NotificationsModal } from '../../components/social/NotificationsModal';
+import { RivalCard } from '../../components/dashboard/RivalCard';
 
+import { fetchTodayHabits, toggleHabitDone, HabitCompletion } from '../../services/habitService';
 import { useUserStore } from '../../store/useUserStore';
 import { useMissionStore } from '../../store/useMissionStore';
 import { fetchTodayMissions } from '../../services/missionService';
 import { supabase } from '../../services/supabase';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { GlobalDrawerContext } from './_layout';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import {
   Dumbbell, Brain, Briefcase, ChevronRight, Zap,
-  Target, CheckCircle, Timer, Flame, Plus, X, Sparkles, Shield,
+  Target, CheckCircle, Timer, Flame, Plus, X, Sparkles, Shield, Clock, Bell,
 } from 'lucide-react-native';
+import { fetchUnreadCount, subscribeToNotifications } from '../../services/notificationService';
 
 import { useAppTheme } from '../../hooks/use-app-theme';
 import { Colors } from '../../constants/theme';
@@ -95,11 +100,7 @@ const getMissionsArray = (tokens: any) => [
   { key: 'WORK', icon: Briefcase,iconColor: tokens.SAGE,   iconBg: `${tokens.SAGE}25` },
 ];
 
-// ── Daily Audit task cards (static from Stitch) ───────────────────────────────
-const AUDIT_TASKS = [
-  { id: 'a1', title: 'Deep Work Session',    time: '9:00 AM – 11:30 AM', pts: 25,  done: true  },
-  { id: 'a2', title: 'Mindfulness Meditation', time: 'Next: 2:00 PM',    pts: null, done: false },
-];
+
 
 const FragmentItem = React.memo(({ index, shatterValue, forgeBg, terrColor }: {
   index: number;
@@ -160,7 +161,23 @@ export default function ForgeDashboardScreen() {
   const [newType, setNewType]       = useState<'TASK'|'TIME'>('TASK');
   const [newDuration, setNewDuration] = useState('30');
    
-    const [creating, setCreating]     = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [todayHabits, setTodayHabits] = useState<HabitCompletion[]>([]);
+  const [habitsLoading, setHabitsLoading] = useState(false);
+
+  // AAR Modal State
+  const [aarVisible, setAarVisible] = useState(false);
+  const [aarData, setAarData] = useState<{
+    title: string;
+    verdict: string;
+    multiplier: number;
+    points: number;
+    success: boolean;
+    isRankUp?: boolean;
+  } | null>(null);
+
   const quoteOfDay = QUOTES[new Date().getDay() % QUOTES.length];
 
   // ── Deterministic point formula ───────────────────────────────────────────
@@ -187,9 +204,59 @@ export default function ForgeDashboardScreen() {
   }, []);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { profile, disciplineScore, currentStreak, deductPoints } = useUserStore();
+  const { profile, disciplineScore, currentStreak, rankUpDetected, setRankUpDetected, updateScoreAndStreak: updateScore } = useUserStore();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { todayMissions, setTodayMissions } = useMissionStore();
+
+  const loadHabits = async () => {
+    if (!profile?.user_id) return;
+    setHabitsLoading(true);
+    try {
+      const today = new Date().toLocaleDateString('en-CA');
+      const data = await fetchTodayHabits(profile.user_id, today);
+      setTodayHabits(data);
+    } catch (e) {
+      console.warn('Habit fetch failed', e);
+    } finally {
+      setHabitsLoading(false);
+    }
+  };
+
+  const handleHabitToggle = async (habitCompletion: HabitCompletion) => {
+    if (!profile?.user_id) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Optimistic update
+    setTodayHabits(prev => prev.map(h =>
+      h.id === habitCompletion.id
+        ? { ...h, status: h.status === 'DONE' ? 'PENDING' : 'DONE' }
+        : h
+    ));
+    try {
+      const pts = (habitCompletion.habits as any)?.reward_points || 10;
+      const result = await toggleHabitDone(
+        profile.user_id,
+        habitCompletion.id, 
+        habitCompletion.status,
+        pts
+      );
+      
+      // If delta is 0, it means the optimistic update was wrong (spam click race condition)
+      if (result.deltaApplied === 0) {
+        setTodayHabits(prev => prev.map(h =>
+          h.id === habitCompletion.id ? { ...h, status: result.status } : h
+        ));
+      } else {
+        // Safe update
+        updateScore(result.deltaApplied, 1.0, false);
+      }
+    } catch (e) {
+      // Revert on error
+      setTodayHabits(prev => prev.map(h =>
+        h.id === habitCompletion.id ? habitCompletion : h
+      ));
+    }
+  };
 
   const loadMissions = async () => {
     if (!profile) return;
@@ -218,9 +285,52 @@ export default function ForgeDashboardScreen() {
   useFocusEffect(
     React.useCallback(() => {
       loadMissions();
+      loadHabits();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [profile])
   );
+
+  // ── Notifications ───────────────────────────────────────────
+  useEffect(() => {
+    if (!profile?.user_id) return;
+    
+    const loadUnread = async () => {
+      try {
+        const count = await fetchUnreadCount(profile.user_id);
+        setUnreadCount(count);
+      } catch (e) {
+        console.warn('Failed to load unread count:', e);
+      }
+    };
+
+    loadUnread();
+    
+    const unsubscribe = subscribeToNotifications(profile.user_id, () => {
+      loadUnread();
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    });
+
+    return unsubscribe;
+  }, [profile?.user_id]);
+
+  const refreshNotificationCount = async () => {
+    if (!profile?.user_id) return;
+    const count = await fetchUnreadCount(profile.user_id);
+    setUnreadCount(count);
+  };
+
+  // ── Auto-AAR Trigger ────────────────────────────────────────────────────────
+  const { showAAR } = useLocalSearchParams<{ showAAR: string }>();
+  useEffect(() => {
+    if (showAAR && todayMissions.length > 0) {
+      const m = todayMissions.find(x => x.completion_id === showAAR);
+      if (m && m.aar_verdict) {
+        handleReviewAAR(m);
+        // Clear param so it doesn't reopen on next focus
+        router.setParams({ showAAR: undefined as any });
+      }
+    }
+  }, [showAAR, todayMissions]);
 
   const handleCreateMission = async () => {
     if (!newTitle.trim() || !profile) return;
@@ -284,28 +394,48 @@ export default function ForgeDashboardScreen() {
     
 
 
+    const pathname = mission?.mission_type === 'TIME' ? '/timer' : '/snap';
     router.push({
-      pathname: '/snap',
+      pathname,
       params: {
         completionId: completion.completion_id,
         title: mission?.title || 'Protocol',
         points: mission?.base_reward_points || 0,
-        expected_duration_mins: mission?.expected_duration_mins || 0,
+        durationMins: mission?.expected_duration_mins || 25,
         isFinish: (completion.started_at != null && completion.ended_at == null && completion.status === 'PENDING') ? 'true' : 'false',
       },
     });
+  };
+
+  const handleReviewAAR = (m: any) => {
+    setAarData({
+      title: (m.missions as any)?.title || 'Mission',
+      verdict: m.aar_verdict || 'No verdict recorded.',
+      multiplier: 1.0, 
+      points: m.points_earned || 0,
+      success: m.status === 'COMPLETED',
+      isRankUp: rankUpDetected,
+    });
+    setAarVisible(true);
+    if (rankUpDetected) setRankUpDetected(false);
   };
 
   // ── FORGE ANIMATION LOGIC ──
   const forgeScale = useSharedValue(1);
   const forgeRotate = useSharedValue(0);
 
+  const isGlowing = currentStreak >= 8 || disciplineScore >= 800;
+  const isChiseled = currentStreak >= 3 || disciplineScore >= 150;
+
   useEffect(() => {
-    if (currentStreak >= 8) {
+    // Reset rotation before applying infinite repeat so it doesn't get stuck
+    forgeRotate.value = 0;
+
+    if (isGlowing) {
        // Glowing Obsidian: fast spin + pulse
        forgeScale.value = withRepeat(withTiming(1.07, { duration: 900, easing: Easing.inOut(Easing.ease) }), -1, true);
        forgeRotate.value = withRepeat(withTiming(360, { duration: 6000, easing: Easing.linear }), -1, false);
-    } else if (currentStreak >= 3) {
+    } else if (isChiseled) {
        // Chiseled Core: medium spin
        forgeScale.value = withRepeat(withTiming(1.03, { duration: 1800, easing: Easing.inOut(Easing.ease) }), -1, true);
        forgeRotate.value = withRepeat(withTiming(360, { duration: 12000, easing: Easing.linear }), -1, false);
@@ -315,7 +445,7 @@ export default function ForgeDashboardScreen() {
        forgeRotate.value = withRepeat(withTiming(360, { duration: 20000, easing: Easing.linear }), -1, false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStreak]);
+  }, [isGlowing, isChiseled]);
 
   // ── Shatter Animation Logic ──────────────────────────────────────────
   const lastStreakRef = useRef(currentStreak);
@@ -358,13 +488,13 @@ export default function ForgeDashboardScreen() {
   let innerBg = 'rgba(255,255,255,0.2)';
   let forgeTitle = 'Raw Stone';
 
-  if (currentStreak >= 8) {
+  if (isGlowing) {
      forgeBg = CHR;
      forgeRadius = 60; // Perfect circle
      fgColor = MUST;
      innerBg = 'rgba(255,255,255,0.05)';
      forgeTitle = 'Glowing Obsidian';
-  } else if (currentStreak >= 3) {
+  } else if (isChiseled) {
      forgeBg = SAGE;
      forgeRadius = 30; // Chiseled
      fgColor = '#fff';
@@ -427,6 +557,25 @@ export default function ForgeDashboardScreen() {
           <Text style={styles.brandName}>Cadence</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <Pressable
+            onPress={() => router.push('/timer')}
+            style={[styles.avatarCircle, { backgroundColor: `${SAGE}20` }]}
+            hitSlop={8}
+          >
+            <Clock size={20} color={SAGE} strokeWidth={2.5} />
+          </Pressable>
+          <Pressable
+            onPress={() => setShowNotifications(true)}
+            style={[styles.avatarCircle, { backgroundColor: `${MUST}20` }]}
+            hitSlop={8}
+          >
+            <Bell size={20} color={MUST} strokeWidth={2.5} />
+            {unreadCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
+          </Pressable>
           <Pressable onPress={() => router.push('/(tabs)/profile')} style={styles.avatarCircle}>
             {(profile as any)?.avatar_url ? (
               <Image
@@ -502,7 +651,70 @@ export default function ForgeDashboardScreen() {
           </Shadow>
         </View>
 
+        {/* ── RIVAL SYSTEM ── */}
+        <RivalCard />
 
+        {/* ── DAILY ROUTINES (Habits) ──────────────────────────────────── */}
+        <View style={styles.habitsSectionHeader}>
+          <Text style={styles.sectionLabel}>Daily Routines</Text>
+          <Pressable
+            onPress={() => router.push('/habits')}
+            style={[styles.manageBtn, { backgroundColor: `${SAGE}15` }]}
+          >
+            <Text style={[styles.manageBtnText, { color: SAGE }]}>Manage</Text>
+          </Pressable>
+        </View>
+
+        {todayHabits.length === 0 ? (
+          <Pressable
+            style={[styles.emptyHabits, clayCard]}
+            onPress={() => router.push('/habits')}
+          >
+            <Text style={styles.emptyHabitsEmoji}>🌅</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.emptyHabitsTitle, { color: CHR }]}>No daily routines set</Text>
+              <Text style={[styles.emptyHabitsHint, { color: `${CHR}50` }]}>Tap to add habits like "Wake up at 5 AM"</Text>
+            </View>
+          </Pressable>
+        ) : (
+          <View style={styles.habitsList}>
+            {todayHabits.map(hc => {
+              const habit = hc.habits as any;
+              const done = hc.status === 'DONE';
+              return (
+                <Pressable
+                  key={hc.id}
+                  style={[styles.habitCheckRow, clayCard, done && { opacity: 0.65 }]}
+                  onPress={() => handleHabitToggle(hc)}
+                >
+                  <View style={[
+                    styles.habitCheckbox,
+                    { borderColor: habit?.color || SAGE },
+                    done && { backgroundColor: habit?.color || SAGE, borderColor: habit?.color || SAGE },
+                  ]}>
+                    {done && <CheckCircle size={16} color="#fff" strokeWidth={3} />}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.habitCheckTitle, { color: CHR }, done && { textDecorationLine: 'line-through', color: `${CHR}50` }]}>
+                      {habit?.title || 'Habit'}
+                    </Text>
+                    {habit?.schedule_time && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                        <Clock size={10} color={`${CHR}40`} strokeWidth={2.5} />
+                        <Text style={[styles.habitCheckTime, { color: `${CHR}40` }]}>{habit.schedule_time}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={[styles.habitPtsBadge, { backgroundColor: done ? `${habit?.color || SAGE}25` : `${CHR}08` }]}>
+                    <Text style={[styles.habitPtsBadgeText, { color: done ? (habit?.color || SAGE) : `${CHR}40` }]}>
+                      +{habit?.reward_points || 10}DP
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
         {/* ── MISSION TRAY ───────────────────────────────────────────── */}
         <Text style={styles.sectionLabel}>Mission Tray</Text>
@@ -543,17 +755,25 @@ export default function ForgeDashboardScreen() {
                     {categoryMissions.length === 0 ? (
                       <Shadow distance={8} startColor={isDark ? '#00000040' : '#B8B2A540'} offset={[2, 4]} style={{ width: '100%', borderRadius: 32 }} containerStyle={{ marginBottom: 12, width: '100%' }}>
                         <View style={[styles.taskRow, { backgroundColor: EGSHELL, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(230,225,215,0.5)', marginBottom: 0 }]}>
-                          <View style={[styles.auditIconBox, { backgroundColor: `${CHR}08` }]}>
+                          <View style={[styles.emptyTaskIconBox, { backgroundColor: `${CHR}08` }]}>
                             <CheckCircle size={20} color={`${CHR}25`} strokeWidth={2} />
                           </View>
-                          <Text style={[styles.auditTitle, { color: `${CHR}50` }]}>No tasks for {key} today</Text>
+                          <Text style={[styles.emptyTaskTitle, { color: `${CHR}50` }]}>No tasks for {key} today</Text>
                         </View>
                       </Shadow>
                     ) : (
                       categoryMissions.map(m => {
                         const done = m.status === 'COMPLETED' || m.status === 'FAILED';
                         return (
-                          <MissionItem key={m.completion_id} completion={m} now={now} onPress={() => !done && handleTaskPress(m)} tokens={tokens} clay={clay} styles={styles} />
+                          <MissionItem 
+                            key={m.completion_id} 
+                            completion={m} 
+                            now={now} 
+                            onPress={() => !done ? handleTaskPress(m) : handleReviewAAR(m)} 
+                            tokens={tokens} 
+                            clay={clay} 
+                            styles={styles} 
+                          />
                         );
                       })
                     )}
@@ -584,30 +804,7 @@ export default function ForgeDashboardScreen() {
           </Pressable>
         )}
 
-        {/* ── DAILY AUDIT TASK CARDS ─────────────────────────────────── */}
-        <View style={styles.auditHeader}>
-          <Text style={styles.sectionLabel}>Daily Audit</Text>
-        </View>
 
-        {AUDIT_TASKS.map(task => (
-           <Shadow key={task.id} distance={8} startColor={isDark ? '#00000040' : '#B8B2A540'} offset={[2, 4]} style={{ width: '100%', borderRadius: 24 }} containerStyle={{ marginBottom: 12, width: '100%' }}>
-            <View style={[styles.auditCard, !task.done && styles.auditCardPending, { backgroundColor: EGSHELL, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(230,225,215,0.5)', marginBottom: 0 }]}>
-              <View style={[styles.auditIconBox, task.done ? clayStamp : {}]}>
-                {task.done
-                  ? <CheckCircle size={20} color="#fff" strokeWidth={2.5} />
-                  : <Timer size={20} color={`${CHR}35`} strokeWidth={2} />
-                }
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.auditTitle}>{task.title}</Text>
-                <Text style={styles.auditTime}>{task.time}</Text>
-              </View>
-              {task.pts != null && (
-                <Text style={styles.auditPts}>+{task.pts} pts</Text>
-              )}
-            </View>
-          </Shadow>
-        ))}
 
       </ScrollView>
 
@@ -648,7 +845,7 @@ export default function ForgeDashboardScreen() {
                   style={[styles.catPill, newCat === cat && styles.catPillActive]}
                   onPress={() => setNewCat(cat)}
                 >
-                  <Text style={[styles.catText, newCat === cat && { color: '#fff' }]}>{cat}</Text>
+                  <Text style={[styles.catText, newCat === cat && { color: '#fff', fontWeight: '900' }]}>{cat}</Text>
                 </Pressable>
               ))}
             </View>
@@ -662,7 +859,7 @@ export default function ForgeDashboardScreen() {
                   style={[styles.catPill, newType === type && styles.catPillActive]}
                   onPress={() => setNewType(type)}
                 >
-                  <Text style={[styles.catText, newType === type && { color: '#fff' }]}>{type === 'TIME' ? 'Timer' : 'Photo Snap'}</Text>
+                  <Text style={[styles.catText, newType === type && { color: '#fff', fontWeight: '900' }]}>{type === 'TIME' ? 'Timer' : 'Photo Snap'}</Text>
                 </Pressable>
               ))}
             </View>
@@ -703,6 +900,31 @@ export default function ForgeDashboardScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* ── AAR Feedback Modal ────────────────────────────────────────── */}
+      {aarData && (
+        <AARModal
+          isVisible={aarVisible}
+          onClose={() => setAarVisible(false)}
+          missionTitle={aarData.title}
+          verdict={aarData.verdict}
+          scoreMultiplier={aarData.multiplier}
+          pointsEarned={aarData.points}
+          isSuccess={aarData.success}
+          isRankUp={aarData.isRankUp}
+          onShare={() => {
+            setAarVisible(false);
+            router.push('/(tabs)/community');
+          }}
+        />
+      )}
+
+      <NotificationsModal
+        visible={showNotifications}
+        onClose={() => setShowNotifications(false)}
+        userId={profile?.user_id || ''}
+        onRefreshCount={loadMissions} 
+      />
     </View>
   );
 }
@@ -826,23 +1048,14 @@ const createStyles = (tokens: any) => {
   activeText:    { fontSize: 11, fontWeight: '900', color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: 1 },
   activeDot:     { width: 7, height: 7, borderRadius: 4, backgroundColor: '#fff', opacity: 0.9 },
 
-  // Daily Audit cards
-  auditHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  viewAll:     { fontSize: 12, fontWeight: '800', color: TERR, textDecorationLine: 'underline' },
-
-  auditCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    borderRadius: 18, padding: 16, marginBottom: 12,
-  },
-  auditCardPending: { borderLeftWidth: 4, borderLeftColor: TERR },
-  auditIconBox: {
+  // Empty task
+  emptyTaskIconBox: {
     width: 42, height: 42, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: `${SAGE}30`,
   },
-  auditTitle: { fontSize: 14, fontWeight: '800', color: CHR, marginBottom: 3 },
-  auditTime:  { fontSize: 11, color: `${CHR}50`, fontWeight: '500' },
-  auditPts:   { fontSize: 14, fontWeight: '900', color: SAGE },
+  emptyTaskTitle: { fontSize: 14, fontWeight: '800', marginBottom: 3 },
+
+
 
   // TaskRow Additions
   clayVesselSmall: {
@@ -874,9 +1087,10 @@ const createStyles = (tokens: any) => {
   modalOverlay:  { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(61,64,91,0.35)' },
   modalSheet: {
-    backgroundColor: '#F9F7F2',
+    backgroundColor: BG,
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     padding: 24, paddingBottom: 40,
+    borderTopWidth: 1, borderTopColor: `${CHR}15`,
     shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.12, shadowRadius: 20, elevation: 16,
   },
@@ -887,15 +1101,16 @@ const createStyles = (tokens: any) => {
   // Form fields
   fieldLabel: { fontSize: 11, fontWeight: '800', color: `${CHR}50`, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8 },
   fieldInput: {
-    backgroundColor: `${CHR}07`, borderRadius: 14, padding: 14,
+    backgroundColor: `${CHR}08`, borderRadius: 14, padding: 14,
     fontSize: 15, color: CHR, fontWeight: '600', marginBottom: 18,
+    borderWidth: 1, borderColor: `${CHR}20`,
   },
 
   // Category selector
   catRow:       { flexDirection: 'row', gap: 10, marginBottom: 18 },
-  catPill:      { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: `${CHR}08`, alignItems: 'center' },
-  catPillActive:{ backgroundColor: CHR },
-  catText:      { fontSize: 12, fontWeight: '900', color: CHR, letterSpacing: 1 },
+  catPill:      { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: `${CHR}08`, alignItems: 'center', borderWidth: 1.5, borderColor: `${CHR}20` },
+  catPillActive:{ backgroundColor: SAGE, borderColor: SAGE },
+  catText:      { fontSize: 12, fontWeight: '900', color: `${CHR}90`, letterSpacing: 1 },
 
   // Create button
   createBtn:     { backgroundColor: TERR, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
@@ -923,5 +1138,60 @@ const createStyles = (tokens: any) => {
     borderRadius: 12, borderWidth: 1.5,
   },
   ptsBadgeText: { fontSize: 16, fontWeight: '900' },
+  
+  // Notification Styles
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: TERR,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: BG,
+    paddingHorizontal: 2,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '900',
+  },
+
+  // ── Daily Routines (Habits) Styles ────────────────────────────────────────
+  habitsSectionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: 4, marginBottom: 12,
+  },
+  manageBtn: {
+    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 100,
+  },
+  manageBtnText: { fontSize: 12, fontWeight: '800' },
+
+  emptyHabits: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    borderRadius: 20, padding: 16, marginBottom: 20,
+    backgroundColor: EGSHELL,
+  },
+  emptyHabitsEmoji: { fontSize: 28 },
+  emptyHabitsTitle: { fontSize: 14, fontWeight: '700' },
+  emptyHabitsHint: { fontSize: 12, fontWeight: '500', marginTop: 2 },
+
+  habitsList: { marginBottom: 20, gap: 10 },
+  habitCheckRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    borderRadius: 20, padding: 14,
+    backgroundColor: EGSHELL,
+  },
+  habitCheckbox: {
+    width: 28, height: 28, borderRadius: 8, borderWidth: 2.5,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  habitCheckTitle: { fontSize: 14, fontWeight: '700' },
+  habitCheckTime: { fontSize: 11, fontWeight: '600' },
+  habitPtsBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 100 },
+  habitPtsBadgeText: { fontSize: 11, fontWeight: '800' },
   });
 };

@@ -9,6 +9,7 @@ import { Camera, X, CheckCircle, Sparkles } from 'lucide-react-native';
 import { useMissionStore } from '../store/useMissionStore';
 import { useUserStore } from '../store/useUserStore';
 import { supabase } from '../services/supabase';
+import { handleMissionComplete } from '../services/missionService';
 import * as Haptics from 'expo-haptics';
 import * as ImageManipulator from 'expo-image-manipulator';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, Easing, withRepeat } from 'react-native-reanimated';
@@ -26,8 +27,9 @@ export default function SnapScreen() {
   const compId = Array.isArray(completionId) ? completionId[0] : completionId;
 
   const [permission, requestPermission] = useCameraPermissions();
-  const { todayMissions, setTodayMissions, markMissionOptimistic } = useMissionStore();
+  const { todayMissions, setTodayMissions } = useMissionStore();
   const { profile } = useUserStore();
+
 
   const [machineState, setMachineState] = useState<ProtocolState>('PENDING');
   const [capturedBase64, setCapturedBase64] = useState<string | null>(null);
@@ -35,6 +37,13 @@ export default function SnapScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const isProcessingRef = useRef(false);
+
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     // Fail-safe unlock for devices that occasionally miss onCameraReady
@@ -253,36 +262,28 @@ export default function SnapScreen() {
     }
   };
 
-  const handleSuccess = async (multiplier: number, basePts: number, wagerAmt: number) => {
+  const handleSuccess = async (multiplier: number, basePts: number, _wagerAmt: number) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setMachineState('DONE');
-    
-    if (compId) {
-      const finalPoints = Math.round((basePts * multiplier) + (wagerAmt * 2.5));
-      
-      // OPTIMISTIC
-      markMissionOptimistic(compId as string);
-      
-      const { profile } = useUserStore.getState();
-      if (profile) {
-        // Just increment local state by the total points (we already deducted wager earlier)
-        useUserStore.setState(s => ({
-          disciplineScore: s.disciplineScore + finalPoints
-        }));
-      }
 
+    if (compId) {
+      // Map AI multiplier → difficulty string for missionService
+      const difficulty =
+        multiplier >= 2   ? 'ELITE'  :
+        multiplier >= 1.5 ? 'HARD'   :
+        multiplier >= 1.2 ? 'MEDIUM' : 'EASY';
+
+      // Mark COMPLETED in DB, update score via consolidated service
       await supabase.from('mission_completions')
-        .update({ status: 'COMPLETED', points_earned: finalPoints } as any)
+        .update({ status: 'COMPLETED' } as any)
         .eq('completion_id', compId);
 
-      if (profile?.user_id) {
-         await supabase.rpc('increment_discipline_score', { 
-           user_id_param: profile.user_id, 
-           score_delta: finalPoints 
-         } as any);
-      }
+      await handleMissionComplete(compId as string, basePts, difficulty);
     }
-    setTimeout(() => router.replace('/(tabs)'), 2500);
+    setTimeout(() => router.replace({
+      pathname: '/(tabs)',
+      params: { showAAR: compId }
+    }), 2500);
   };
 
   const shatterY = useSharedValue(0);
@@ -400,6 +401,18 @@ export default function SnapScreen() {
           />
         )}
 
+        {/* SNAPCHAT STYLE TIMESTAMP OVERLAY */}
+        {(!isVerifying && !isProcessing) && (
+          <View style={styles.timestampOverlay}>
+            <Text style={styles.timeText}>
+              {currentTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+            </Text>
+            <Text style={styles.dateText}>
+              {currentTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+            </Text>
+          </View>
+        )}
+
         {isVerifying && (
           <View style={[StyleSheet.absoluteFill, styles.center, { backgroundColor: BG, zIndex: 10 }]}>
              <Animated.View style={[styles.architectStone, styles.clayLifted, architectStyle]}>
@@ -470,6 +483,20 @@ const createStyles = (tokens: any) => {
     topSub:   { fontSize: 10, fontWeight: '700', color: `${CHR}40`, letterSpacing: 1.5, textTransform: 'uppercase' },
     cameraWrap: { flex: 1, position: 'relative', overflow: 'hidden' },
     camera:     { flex: 1 },
+    timestampOverlay: {
+      position: 'absolute',
+      top: 32,
+      alignSelf: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0,0,0,0.4)',
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.15)',
+    },
+    timeText: { fontSize: 56, fontWeight: '900', color: '#FFF', letterSpacing: 1 },
+    dateText: { fontSize: 16, fontWeight: '700', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: 2, marginTop: 4 },
     clayLifted: { shadowColor: isDark ? '#000' : '#B8B2A5', shadowOffset: { width: 6, height: 8 }, shadowOpacity: isDark ? 0.6 : 0.4, shadowRadius: 16, elevation: 8, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.7)' },
     architectStone: { width: 120, height: 120, borderRadius: 40, backgroundColor: SAGE, alignItems: 'center', justifyContent: 'center', marginBottom: 40 },
     architectInner: { width: 60, height: 60, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.4)' },

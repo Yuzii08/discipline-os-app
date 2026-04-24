@@ -19,6 +19,21 @@ export const fetchPosts = async () => {
   return data as Post[];
 };
 
+/**
+ * Returns the set of post_ids that the given user has "ZAP"-reacted to.
+ * Used to seed the initial firedByMe state on the community feed.
+ */
+export const fetchUserZaps = async (userId: string): Promise<Set<string>> => {
+  const { data } = await supabase
+    .from('social_interactions' as any)
+    .select('post_id')
+    .eq('user_id', userId)
+    .eq('interaction_type', 'ZAP');
+  return new Set((data ?? []).map((r: any) => r.post_id));
+};
+
+
+
 export const createPost = async (userId: string, content: string, imageUrl?: string, completionId?: string) => {
   const { data, error } = await supabase
     .from('posts' as any)
@@ -78,3 +93,32 @@ export const addComment = async (postId: string, userId: string, content: string
   // Increment comment counter
   await supabase.rpc('increment_post_comment' as any, { p_id: postId } as any);
 };
+
+export const toggleZap = async (postId: string, userId: string, currentlyZapped: boolean) => {
+  if (currentlyZapped) {
+    await supabase.from('social_interactions' as any)
+      .delete()
+      .match({ post_id: postId, user_id: userId, interaction_type: 'ZAP' });
+    await supabase.rpc('decrement_post_zap' as any, { p_id: postId } as any);
+  } else {
+    await supabase.from('social_interactions' as any)
+      .insert({ post_id: postId, user_id: userId, interaction_type: 'ZAP' } as any);
+    await supabase.rpc('increment_post_zap' as any, { p_id: postId } as any);
+  }
+};
+
+/**
+ * Subscribes to changes in the community feed (posts, comments, interactions).
+ */
+export const subscribeToCommunityFeed = (onUpdate: (payload: any) => void) => {
+  const channel = supabase.channel('community_feed')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, onUpdate)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'social_interactions' }, onUpdate)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, onUpdate)
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+

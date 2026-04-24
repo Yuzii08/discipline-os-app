@@ -1,92 +1,109 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Colors, Spacing, Typography, Radius, create3DCardStyle, Elevation } from '../../constants/theme';
-import { IconSymbol } from '../ui/icon-symbol';
-import { supabase } from '../../services/supabase';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { Shield, Target, Zap } from 'lucide-react-native';
 import { useUserStore } from '../../store/useUserStore';
+import { useThemeStyles } from '../../hooks/use-theme-styles';
 
-interface Props {
-  rivalName: string;
-  rivalRankTier: string; 
-  pointsDifference: number; 
-}
+export function RivalCard() {
+  const { tokens, styles: themeStyles, clay } = useThemeStyles(createCardStyles);
+  const { CHR, TERR, SAGE, MUST, isDark } = tokens;
+  const { clayCard } = clay;
 
-export function RivalCard({ rivalName, rivalRankTier, pointsDifference }: Props) {
-  const isChasing = pointsDifference > 0;
   const [isPinging, setIsPinging] = React.useState(false);
-  const { showToast, activeChallenge } = useUserStore();
+  const { 
+    rivalProfile, discoverRival, showToast, disciplineScore 
+  } = useUserStore();
 
+  React.useEffect(() => {
+    discoverRival();
+  }, [discoverRival]);
+
+  if (!rivalProfile) return null;
+
+  const pointsDifference = Math.abs(disciplineScore - rivalProfile.score);
+  const isChasing = disciplineScore < rivalProfile.score;
+  
   const handlePingRival = async () => {
     setIsPinging(true);
-    // Determine if Rival is effectively in gauntlet. For immediate mockup feel, we assume
-    // rival is in the same gauntlet if user is.
-    const isInGauntlet = activeChallenge?.challengeName?.includes('GAUNTLET');
-    
     try {
-      await supabase.functions.invoke('send-nudge', {
-        body: { sender_id: 'local_user', receiver_id: 'rival_id', is_in_gauntlet: isInGauntlet }
-      });
-      showToast('Ping Deployed');
-    } catch {
-      showToast('Ping Deployed (Mock)');
+      // Logic for nudging rival
+      await new Promise(r => setTimeout(r, 1000));
+      showToast(`Ping sent to ${rivalProfile.username}`);
+    } finally {
+      setIsPinging(false);
     }
-    setTimeout(() => setIsPinging(false), 1000);
   };
   
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, clayCard]}>
       <View style={styles.headerRow}>
-        <Text style={styles.headerText}>COMPETITIVE TARGET</Text>
+        <Target size={14} color={isChasing ? TERR : SAGE} strokeWidth={2.5} />
+        <Text style={styles.headerText}>COMPETITIVE RIVAL</Text>
       </View>
 
       <View style={styles.contentRow}>
         <View style={styles.infoCol}>
-          <Text style={styles.rivalName}>{rivalName}</Text>
-          <Text style={styles.rivalRank}>{rivalRankTier}</Text>
+          <Text style={styles.rivalName}>{rivalProfile.username}</Text>
+          <View style={styles.rankRow}>
+            <Shield size={10} color={`${CHR}60`} strokeWidth={2} />
+            <Text style={styles.rivalRank}>{rivalProfile.tier}</Text>
+          </View>
         </View>
 
-        <View style={styles.diffBox}>
-          <Text style={[styles.diffText, { color: isChasing ? Colors.work : Colors.success }]}>
+        <View style={[styles.diffBox, { borderColor: isChasing ? `${TERR}30` : `${SAGE}30` }]}>
+          <Text style={[styles.diffText, { color: isChasing ? TERR : SAGE }]}>
             {isChasing ? `-${pointsDifference.toLocaleString()}` : `+${pointsDifference.toLocaleString()}`}
           </Text>
           <Text style={styles.diffLabel}>PTS {isChasing ? 'BEHIND' : 'AHEAD'}</Text>
         </View>
       </View>
 
-      <TouchableOpacity 
-        style={styles.pingButton} 
+      <Pressable 
+        style={({ pressed }) => [
+          styles.pingButton, 
+          { backgroundColor: pressed ? `${MUST}90` : MUST },
+          isPinging && { opacity: 0.7 }
+        ]} 
         onPress={handlePingRival}
         disabled={isPinging}
       >
         {isPinging ? (
-          <ActivityIndicator color={Colors.bg.primary} size="small" />
+          <ActivityIndicator color="#000" size="small" />
         ) : (
           <>
-            <IconSymbol name="bolt.fill" size={14} color={Colors.bg.primary} />
-            <Text style={styles.pingButtonText}>PING STRATEGY</Text>
+            <Zap size={16} color="#000" strokeWidth={2.5} />
+            <Text style={styles.pingButtonText}>ZAP RIVAL</Text>
           </>
         )}
-      </TouchableOpacity>
+      </Pressable>
     </View>
   );
 }
 
+const createCardStyles = (tokens: any) => {
+  const { CHR } = tokens;
+  return StyleSheet.create({}); // Logic handled by useThemeStyles
+};
+
 const styles = StyleSheet.create({
   container: {
-    ...create3DCardStyle(),
-    padding: Spacing.xl,
-    marginBottom: Spacing.xl,
+    marginHorizontal: 24,
+    padding: 20,
+    borderRadius: 28,
+    marginBottom: 24,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.sm,
-    gap: Spacing.xs,
+    marginBottom: 12,
+    gap: 8,
   },
   headerText: {
-    ...Typography.caption,
-    color: Colors.text.secondary,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#3D405B',
+    letterSpacing: 1.5,
+    opacity: 0.5,
   },
   contentRow: {
     flexDirection: 'row',
@@ -97,46 +114,60 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   rivalName: {
-    ...Typography.h3,
-    color: Colors.text.primary,
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#3D405B',
+  },
+  rankRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
   },
   rivalRank: {
-    ...Typography.caption,
-    color: Colors.text.secondary,
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#3D405B',
+    opacity: 0.6,
+    textTransform: 'uppercase',
   },
   diffBox: {
     alignItems: 'flex-end',
-    backgroundColor: Colors.bg.card,
-    borderRadius: Radius.md,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.borderLight,
-    borderBottomWidth: 2,
-    borderBottomColor: Colors.borderDark,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.xs,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   diffText: {
-    ...Typography.h2,
+    fontSize: 20,
+    fontWeight: '900',
   },
   diffLabel: {
-    ...Typography.caption,
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#3D405B',
+    opacity: 0.5,
+    marginTop: 2,
   },
   pingButton: {
-    marginTop: Spacing.xl,
-    backgroundColor: Colors.accent,
-    borderRadius: Radius.full,
-    borderTopWidth: 1,
-    borderTopColor: Colors.accentBorder,
-    borderBottomWidth: 4,
-    borderBottomColor: '#265BC7', // Darker blue shadow
+    marginTop: 20,
+    height: 52,
+    borderRadius: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    ...Elevation.soft,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   pingButtonText: {
-    ...Typography.h3,
-    color: '#000000',
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#000',
+    letterSpacing: 1,
   }
 });

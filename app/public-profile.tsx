@@ -31,7 +31,7 @@ export default function PublicProfileScreen() {
     try {
       const { data: userData } = await supabase
         .from('users')
-        .select('username, discipline_score, current_streak, max_streak, global_rank_tier, created_at, avatar_url')
+        .select('username, bio, discipline_score, current_streak, max_streak, global_rank_tier, created_at, avatar_url')
         .eq('user_id', userId)
         .single();
       setUser(userData);
@@ -101,6 +101,10 @@ export default function PublicProfileScreen() {
           </View>
 
           <Text style={styles.username}>{user.username}</Text>
+
+          {user.bio ? (
+            <Text style={styles.bioText} numberOfLines={3}>{user.bio}</Text>
+          ) : null}
 
           <View style={[styles.tierPill, { backgroundColor: `${tierInfo.color}25` }]}>
             <Trophy size={12} color={tierInfo.color} strokeWidth={2.5} />
@@ -222,7 +226,8 @@ const createStyles = (tokens: any, clay: any) => {
       width: 112, height: 112, opacity: 0.5,
     },
     avatarLetter: { fontSize: 42, fontWeight: '900' },
-    username:     { fontSize: 26, fontWeight: '900', color: CHR, letterSpacing: -0.5, marginBottom: 10 },
+    username:     { fontSize: 26, fontWeight: '900', color: CHR, letterSpacing: -0.5, marginBottom: 4 },
+    bioText:      { fontSize: 13, color: `${CHR}70`, textAlign: 'center', marginHorizontal: 30, marginBottom: 14, fontWeight: '500', lineHeight: 18 },
     tierPill:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 100, marginBottom: 8 },
     tierText:     { fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
     memberSince:  { fontSize: 11, fontWeight: '600', color: `${CHR}45` },
